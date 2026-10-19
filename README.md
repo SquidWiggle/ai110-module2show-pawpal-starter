@@ -44,14 +44,23 @@ pip install -r requirements.txt
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
-
+An example usage of the CLI app is in main.py.
+1. Define pets Tama (cat) and Pochi (dog).
+2. Create tasks for Tama (cat) and Pochi (dog). Tama (cat) requires feedings. Pochi (dog) requires both feedings and walks.
+3. Create an Owner with default work & sleep time blocks blacked out so the scheduler understands the available times for pet tasks.
+4. Schedule their 3 tasks.
+5. Get all the scheduled task and print them out.
+Run main.py
+```bash
+python3 main.py
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+```
+Scheduled Tasks:
+Time              Task            Pet        Duration   Priority
+------------------------------------------------------------
+2024-06-01 08:00  Feed Tama       Tama       15m        HIGH
+2024-06-01 08:30  Feed Pochi      Pochi      15m        HIGH
+2024-06-01 10:00  Walk Pochi      Pochi      30m        MEDIUM
 ```
 
 ## 🧪 Testing PawPal+
@@ -67,19 +76,34 @@ pytest --cov
 Sample test output:
 
 ```
-# Paste your pytest output here
+============================= test session starts ==============================
+platform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/sameen/CodePath/ai110-module2show-pawpal-starter
+plugins: cov-7.1.0, anyio-4.15.1
+collecting ... collected 10 items
+
+test_pawpal.py ..........                                                [100%]
+
+================================ tests coverage ================================
+______________ coverage: platform darwin, python 3.13.15-final-0 _______________
+
+Name               Stmts   Miss  Cover
+--------------------------------------
+pawpal_system.py     255     54    79%
+test_pawpal.py       113      0   100%
+--------------------------------------
+TOTAL                368     54    85%
+============================== 10 passed in 0.26s ===============================
 ```
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
-
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | `Scheduler.organize_tasks()` | Sorts tasks primarily chronologically by `due_date`, then by priority (`HIGH: 0`, `MEDIUM: 1`, `LOW: 2`). |
+| Filtering | `Scheduler.see_todays_tasks()`, `Owner.get_all_tasks()` | `see_todays_tasks()` filters tasks matching a specific date (`target_date`), excludes completed tasks during conflict/slot analysis, and delegates multi-pet task aggregation to `Owner.get_all_tasks()`. |
+| Conflict handling | `TimeSlot.overlaps()`, `Scheduler.alert_conflict()`, `Scheduler.suggest_time_slot()` | `alert_conflict()` identifies pairwise overlapping uncompleted tasks and collisions against `Owner.blocked_times`. `suggest_time_slot()` finds the earliest open window in available times skipping task and block conflicts. |
+| Recurring tasks | `TimeSlot.overlaps()`, `Owner.block_time()`, `Owner.get_available_times()` | Supports `Recurrence` enums (`DAILY`, `WEEKLY`, `MONTHLY`). `TimeSlot.overlaps()` projects daily recurring events by time-of-day; `get_available_times()` subtracts recurring blocked times from the requested query window. |
 
 ## 📸 Demo Walkthrough
 

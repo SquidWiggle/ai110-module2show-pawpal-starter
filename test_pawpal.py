@@ -124,3 +124,71 @@ def test_suggest_time_slot_skips_blocked_times():
     assert suggested is not None
     assert suggested.start_time == base + timedelta(minutes=30)
     assert suggested.end_time == base + timedelta(minutes=60)
+
+
+def test_owner_schedule_task_without_explicit_scheduler():
+    owner = Owner(name="Alex")
+    dog = Pet(name="Rusty", species="Dog", breed="Labrador")
+    owner.add_pet(dog)
+    task = Task(description="Evening walk", pet=dog)
+
+    owner.schedule_task(task)
+
+    assert task in owner.get_all_tasks()
+    assert task in owner.scheduler.tasks
+
+
+def test_owner_get_available_times_from_blocked_times():
+    base_date = datetime(2026, 10, 19, 0, 0)
+    end_date = base_date + timedelta(days=1)
+    owner = Owner(
+        name="Sam",
+        blocked_times=[
+            TimeSlot(
+                start_time=base_date,
+                duration=480,
+                recurrence=Recurrence.DAILY,
+                description="Sleep",
+            ),
+            TimeSlot(
+                start_time=base_date.replace(hour=9),
+                duration=480,
+                recurrence=Recurrence.DAILY,
+                description="Work",
+            ),
+        ],
+    )
+
+    available = owner.get_available_times(base_date, end_date)
+    # Available should be 08:00-09:00 (60 min) and 17:00-24:00 (420 min)
+    assert len(available) == 2
+    assert available[0].start_time == base_date.replace(hour=8)
+    assert available[0].end_time == base_date.replace(hour=9)
+    assert available[1].start_time == base_date.replace(hour=17)
+    assert available[1].end_time == end_date
+
+
+def test_organize_tasks_due_date_precedence():
+    scheduler = Scheduler()
+    base = datetime(2026, 10, 19, 10, 0)
+    task_early_low = Task(
+        description="Low priority early",
+        due_date=base,
+        priority=Priority.LOW,
+    )
+    task_late_high = Task(
+        description="High priority late",
+        due_date=base + timedelta(hours=1),
+        priority=Priority.HIGH,
+    )
+    task_early_high = Task(
+        description="High priority early",
+        due_date=base,
+        priority=Priority.HIGH,
+    )
+
+    # Earlier due_date must rank ahead of higher priority later due_date.
+    # When due_dates match, higher priority ranks first.
+    ordered = scheduler.organize_tasks([task_late_high, task_early_low, task_early_high])
+    assert ordered == [task_early_high, task_early_low, task_late_high]
+

@@ -4,15 +4,23 @@ classDiagram
     class TimeSlot {
         +DateTime start_time
         +DateTime end_time
+        +int duration
+        +Recurrence recurrence
+        +String description
+        +overlaps(other: TimeSlot) bool
     }
 
     class Owner {
         +String name
         +List~Pet~ pets
         +List~TimeSlot~ available_times
+        +List~TimeSlot~ blocked_times
+        +Scheduler scheduler
         +add_pet(pet: Pet)
+        +block_time(start_time: DateTime, duration: int, recurrence: Recurrence, description: String) TimeSlot
+        +get_available_times(start: DateTime, end: DateTime) List~TimeSlot~
         +get_all_tasks() List~Task~
-        +schedule_task(scheduler: Scheduler, task: Task)
+        +schedule_task(task: Task, scheduler: Scheduler)
         +feed_pet(pet: Pet)
         +play_with_pet(pet: Pet)
     }
@@ -36,6 +44,7 @@ classDiagram
         +int duration
         +Recurrence recurrence
         +bool is_completed
+        +TimeSlot time_slot
         +execute()
     }
 
@@ -43,10 +52,10 @@ classDiagram
         +Owner owner
         +List~Task~ tasks
         +schedule_task(task: Task)
-        +organize_tasks() List~Task~
-        +see_todays_tasks() List~Task~
-        +alert_conflict(available_times: List~TimeSlot~)
-        +suggest_time_slot(duration_minutes: int, available_times: List~TimeSlot~) TimeSlot
+        +organize_tasks(tasks: List~Task~, owner: Owner) List~Task~
+        +see_todays_tasks(owner: Owner, target_date: DateTime) List~Task~
+        +alert_conflict(available_times: List~TimeSlot~, owner: Owner) List
+        +suggest_time_slot(duration_minutes: int, available_times: List~TimeSlot~, owner: Owner) TimeSlot
     }
 
     class Priority {
@@ -74,11 +83,13 @@ classDiagram
     }
 
     Owner "1" o-- "0..*" Pet : owns
-    Owner "1" o-- "0..*" TimeSlot : has
-    Owner ..> Scheduler : uses
+    Owner "1" *-- "0..*" TimeSlot : blocked_times
+    Owner "1" o-- "0..*" TimeSlot : available_times
+    Owner "1" *-- "1" Scheduler : manages
+    Task "1" *-- "1" TimeSlot : time_slot
     Pet "1" o-- "0..*" Task : has
     Scheduler "1" o-- "0..*" Task : manages
-    Scheduler ..> Owner : queries
+    Scheduler "0..1" --> "1" Owner : owner
     Scheduler ..> TimeSlot : evaluates
     Task "0..*" --> "1" Pet : targets
     Task ..> Priority

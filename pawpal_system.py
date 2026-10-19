@@ -27,10 +27,30 @@ class Recurrence(Enum):
 @dataclass
 class TimeSlot:
     start_time: datetime
-    end_time: datetime
+    end_time: datetime | None = None
+    duration: int | None = None
+    recurrence: Recurrence | None = None
+    description: str = ""
+
+    def __post_init__(self) -> None:
+        if self.end_time is None and self.duration is not None:
+            self.end_time = self.start_time + timedelta(minutes=self.duration)
+        elif self.duration is None and self.end_time is not None:
+            self.duration = int((self.end_time - self.start_time).total_seconds() // 60)
+        elif self.end_time is None and self.duration is None:
+            self.end_time = self.start_time
+            self.duration = 0
 
     def overlaps(self, other: "TimeSlot") -> bool:
-        return self.start_time < other.end_time and other.start_time < self.end_time
+        if self.end_time is None or other.end_time is None:
+            return False
+        if self.start_time < other.end_time and other.start_time < self.end_time:
+            return True
+        if self.recurrence == Recurrence.DAILY or other.recurrence == Recurrence.DAILY:
+            s1, e1 = self.start_time.time(), self.end_time.time()
+            s2, e2 = other.start_time.time(), other.end_time.time()
+            return s1 < e2 and s2 < e1
+        return False
 
 
 
@@ -149,10 +169,62 @@ class Owner:
     pets: list[Pet] = field(default_factory=list)
     available_times: list[TimeSlot] = field(default_factory=list)
     blocked_times: list[TimeSlot] = field(default_factory=list)
+    scheduler: "Scheduler | None" = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.scheduler is None:
+            self.scheduler = Scheduler(owner=self)
+        elif self.scheduler.owner is None:
+            self.scheduler.owner = self
 
     def add_pet(self, pet: Pet) -> None:
         if pet not in self.pets:
             self.pets.append(pet)
+
+    def block_time(
+        self,
+        start_time: datetime,
+        duration: int | None = None,
+        end_time: datetime | None = None,
+        recurrence: Recurrence | None = None,
+        description: str = "",
+    ) -> TimeSlot:
+        slot = TimeSlot(
+            start_time=start_time,
+            end_time=end_time,
+            duration=duration,
+            recurrence=recurrence,
+            description=description,
+        )
+        self.blocked_times.append(slot)
+        return slot
+
+    def get_available_times(self, start: datetime, end: datetime) -> list[TimeSlot]:
+        free_intervals = [(start, end)]
+        relevant_blocks: list[tuple[datetime, datetime]] = []
+        for b in self.blocked_times:
+            if b.end_time is None:
+                continue
+            if b.recurrence == Recurrence.DAILY:
+                b_start = datetime.combine(start.date(), b.start_time.time())
+                b_end = b_start + timedelta(minutes=b.duration or int((b.end_time - b.start_time).total_seconds() // 60))
+                relevant_blocks.append((b_start, b_end))
+            else:
+                relevant_blocks.append((b.start_time, b.end_time))
+
+        for b_start, b_end in sorted(relevant_blocks, key=lambda x: x[0]):
+            new_free = []
+            for f_start, f_end in free_intervals:
+                if b_end <= f_start or b_start >= f_end:
+                    new_free.append((f_start, f_end))
+                else:
+                    if f_start < b_start:
+                        new_free.append((f_start, b_start))
+                    if b_end < f_end:
+                        new_free.append((b_end, f_end))
+            free_intervals = new_free
+
+        return [TimeSlot(s, e) for s, e in free_intervals]
 
     def get_all_tasks(self) -> list[Task]:
         # Aggregate tasks across every pet
@@ -161,10 +233,19 @@ class Owner:
             all_tasks.extend(pet.tasks)
         return all_tasks
 
-    def schedule_task(self, scheduler: "Scheduler", task: Task) -> None:
+    def schedule_task(self, arg1: "Scheduler | Task", arg2: Task | None = None) -> None:
+        if isinstance(arg1, Task):
+            task = arg1
+            target_scheduler = arg2 or self.scheduler or Scheduler(owner=self)
+        else:
+            target_scheduler = arg1
+            task = arg2
+
+        if task is None:
+            return
         if task.pet and task.pet in self.pets and task not in task.pet.tasks:
             task.pet.add_task(task)
-        scheduler.schedule_task(task)
+        target_scheduler.schedule_task(task)
 
     def feed_pet(self, pet: Pet) -> None:
         feed_tasks = [t for t in pet.tasks if t.type == TaskType.FEEDINGS and not t.is_completed]
@@ -227,8 +308,8 @@ class Scheduler:
         return sorted(
             task_list,
             key=lambda t: (
-                priority_weights.get(t.priority, 1),
                 t.due_date,
+                priority_weights.get(t.priority, 1),
             ),
         )
 
@@ -267,7 +348,12 @@ class Scheduler:
         owner: Owner | None = None,
     ) -> TimeSlot | None:
         active_owner = owner or self.owner
-        slots = available_times or (active_owner.available_times if active_owner else [])
+        slots = available_times or (active_owner.available_times if active_owner and active_owner.available_times else [])
+        if not slots and active_owner and active_owner.blocked_times:
+            now = datetime.now()
+            day_start = datetime(now.year, now.month, now.day, 0, 0)
+            day_end = day_start + timedelta(days=1)
+            slots = active_owner.get_available_times(day_start, day_end)
         if not slots:
             return None
 
