@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, time, date
+from datetime import datetime, timedelta, time as dt_time, date
 from enum import Enum
 from itertools import combinations
 
@@ -44,20 +44,52 @@ class TimeSlot:
             self.duration = 0
 
     def overlaps(self, other: "TimeSlot") -> bool:
-        if self.end_time is None or other.end_time is None:
+        if not self.end_time or not other.end_time:
             return False
-        if self.start_time < other.end_time and other.start_time < self.end_time:
-            return True
-        if self.recurrence == Recurrence.DAILY or other.recurrence == Recurrence.DAILY:
-            s1, e1 = self.start_time.time(), self.end_time.time()
-            s2, e2 = other.start_time.time(), other.end_time.time()
+        if not self.recurrence and not other.recurrence:
+            return self.start_time < other.end_time and other.start_time < self.end_time
 
-            def _daily_segments(s: time, e: time) -> list[tuple[time, time]]:
-                return [(s, time.max), (time.min, e)] if s > e else [(s, e)]
+        def _intervals(slot: "TimeSlot", d: date) -> list[tuple[datetime, datetime]]:
+            dur = slot.end_time - slot.start_time
+            st = datetime.combine(d, slot.start_time.time())
+            res = [(st, st + dur)]
+            if slot.start_time.time() > slot.end_time.time() and slot.recurrence == Recurrence.DAILY:
+                res.append((datetime.combine(d, dt_time.min), datetime.combine(d, slot.end_time.time())))
+            return res
 
-            for a_s, a_e in _daily_segments(s1, e1):
-                for b_s, b_e in _daily_segments(s2, e2):
-                    if a_s < b_e and b_s < a_e:
+        if self.recurrence and other.recurrence:
+            same_cycle = (
+                (self.recurrence == other.recurrence == Recurrence.DAILY)
+                or (self.recurrence == other.recurrence == Recurrence.WEEKLY and self.start_time.weekday() == other.start_time.weekday())
+                or (self.recurrence == other.recurrence == Recurrence.MONTHLY and self.start_time.day == other.start_time.day)
+                or self.recurrence == Recurrence.DAILY
+                or other.recurrence == Recurrence.DAILY
+            )
+            if not same_cycle:
+                return False
+            ref = date(2000, 1, 2)
+            return any(s1 < e2 and s2 < e1 for s1, e1 in _intervals(self, ref) for s2, e2 in _intervals(other, ref))
+
+        rec, fix = (self, other) if self.recurrence else (other, self)
+        if fix.end_time.date() < rec.start_time.date():
+            return False
+
+        def _matches(d: date) -> bool:
+            return (
+                rec.recurrence == Recurrence.DAILY
+                or (rec.recurrence == Recurrence.WEEKLY and d.weekday() == rec.start_time.weekday())
+                or (rec.recurrence == Recurrence.MONTHLY and d.day == rec.start_time.day)
+            )
+
+        dates = {fix.start_time.date(), fix.end_time.date()}
+        prev_d = fix.start_time.date() - timedelta(days=1)
+        if prev_d >= rec.start_time.date():
+            dates.add(prev_d)
+
+        for d in dates:
+            if _matches(d):
+                for s, e in _intervals(rec, d):
+                    if s < fix.end_time and fix.start_time < e:
                         return True
         return False
 
@@ -80,6 +112,22 @@ class Pet:
         return list(self.tasks)
 
 
+def _parse_time(val: datetime | str | date | dt_time | None, base: date | None = None) -> datetime:
+    if val is None:
+        return datetime.now()
+    if isinstance(val, datetime):
+        return val
+    base_date = base or date.today()
+    if isinstance(val, str):
+        parts = [int(p) for p in val.split(":")]
+        return datetime.combine(base_date, dt_time(parts[0], parts[1], parts[2] if len(parts) > 2 else 0))
+    if isinstance(val, dt_time):
+        return datetime.combine(base_date, val)
+    if isinstance(val, date):
+        return datetime.combine(val, dt_time.min)
+    return val
+
+
 @dataclass
 class Task:
     description: str = ""
@@ -94,63 +142,43 @@ class Task:
     def __init__(
         self,
         description: str = "",
-        due_date: datetime | None = None,
+        due_date: datetime | str | date | None = None,
         priority: Priority | str = Priority.MEDIUM,
         type: TaskType | str = TaskType.WALKS,
         pet: Pet | None = None,
         duration: int = 30,
         recurrence: Recurrence | str | None = None,
         is_completed: bool = False,
-        time: datetime | None = None,
+        time: datetime | str | None = None,
         frequency: Recurrence | str | None = None,
         completion_status: bool | None = None,
     ):
-        self.description = description
-        self.due_date = due_date or time or datetime.now()
-
-        if isinstance(priority, str):
-            self.priority = Priority(priority.upper())
-        else:
-            self.priority = priority
-
-        if isinstance(type, str):
-            self.type = TaskType(type.upper())
-        else:
-            self.type = type
-
+        raw_val = due_date if due_date is not None else time
+        self.due_date = _parse_time(raw_val)
+        self.type = TaskType(type.upper()) if isinstance(type, str) else type
+        self.description = description or (self.type.value if hasattr(self.type, "value") else str(self.type))
+        self.priority = Priority(priority.upper()) if isinstance(priority, str) else priority
         self.pet = pet
         self.duration = duration
-
-        rec = frequency if frequency is not None else recurrence
-        if isinstance(rec, str):
-            self.recurrence = Recurrence(rec.upper())
-        else:
-            self.recurrence = rec
-
-        if completion_status is not None:
-            self.is_completed = completion_status
-        else:
-            self.is_completed = is_completed
-
-        if not self.description:
-            self.description = self.type.value if hasattr(
-                self.type, "value") else str(self.type)
+        rec = recurrence if recurrence is not None else frequency
+        self.recurrence = Recurrence(rec.upper()) if isinstance(rec, str) else rec
+        self.is_completed = completion_status if completion_status is not None else is_completed
 
     @property
     def time(self) -> datetime:
         return self.due_date
 
     @time.setter
-    def time(self, val: datetime) -> None:
-        self.due_date = val
+    def time(self, val: datetime | str | dt_time | date) -> None:
+        self.due_date = _parse_time(val, self.due_date.date() if isinstance(self.due_date, datetime) else None)
 
     @property
     def frequency(self) -> Recurrence | None:
         return self.recurrence
 
     @frequency.setter
-    def frequency(self, val: Recurrence | None) -> None:
-        self.recurrence = val
+    def frequency(self, val: Recurrence | str | None) -> None:
+        self.recurrence = Recurrence(val.upper()) if isinstance(val, str) else val
 
     @property
     def completion_status(self) -> bool:
@@ -180,13 +208,11 @@ class Task:
             return None
         self.is_completed = True
 
-        delta: timedelta | None = None
-        if self.recurrence == Recurrence.DAILY:
-            delta = timedelta(days=1)
-        elif self.recurrence == Recurrence.WEEKLY:
-            delta = timedelta(weeks=1)
-        elif self.recurrence == Recurrence.MONTHLY:
-            delta = timedelta(days=30)
+        delta = {
+            Recurrence.DAILY: timedelta(days=1),
+            Recurrence.WEEKLY: timedelta(weeks=1),
+            Recurrence.MONTHLY: timedelta(days=30),
+        }.get(self.recurrence)
 
         if delta is not None:
             next_task = Task(
@@ -257,7 +283,7 @@ class Owner:
                         or (b.recurrence == Recurrence.WEEKLY and curr.weekday() == b.start_time.weekday())
                         or (b.recurrence == Recurrence.MONTHLY and curr.day == b.start_time.day)
                     )
-                    if match:
+                    if match and curr >= b.start_time.date():
                         b_start = datetime.combine(curr, b.start_time.time())
                         b_end = b_start + timedelta(minutes=block_dur)
                         if b_start < end and b_end > start:
@@ -284,61 +310,23 @@ class Owner:
         return [TimeSlot(s, e) for s, e in free_intervals]
 
     def get_all_tasks(self) -> list[Task]:
-        # Aggregate tasks across every pet
-        all_tasks: list[Task] = []
-        for pet in self.pets:
-            all_tasks.extend(pet.tasks)
-        return all_tasks
+        tasks: list[Task] = []
+        for t in [task for pet in self.pets for task in pet.tasks] + (self.scheduler.tasks if self.scheduler else []):
+            if t not in tasks:
+                tasks.append(t)
+        return tasks
 
     def schedule_task(self, arg1: "Scheduler | Task", arg2: Task | None = None) -> None:
-        if isinstance(arg1, Task):
-            task = arg1
-            target_scheduler = arg2 or self.scheduler or Scheduler(owner=self)
-        else:
-            target_scheduler = arg1
-            task = arg2
-
-        if task is None:
+        target_scheduler, task = (self.scheduler or Scheduler(owner=self), arg1) if isinstance(arg1, Task) else (arg1, arg2)
+        if not task:
             return
-        if task.pet and task.pet in self.pets and task not in task.pet.tasks:
+        if not self.scheduler:
+            self.scheduler = target_scheduler
+        if task.pet:
+            if task.pet not in self.pets:
+                self.add_pet(task.pet)
             task.pet.add_task(task)
         target_scheduler.schedule_task(task)
-
-    def feed_pet(self, pet: Pet) -> None:
-        feed_tasks = [t for t in pet.tasks if t.type ==
-                      TaskType.FEEDINGS and not t.is_completed]
-        if feed_tasks:
-            for t in feed_tasks:
-                t.execute()
-        else:
-            completed_feed = Task(
-                description=f"Feeding {pet.name}",
-                due_date=datetime.now(),
-                priority=Priority.HIGH,
-                type=TaskType.FEEDINGS,
-                pet=pet,
-                duration=15,
-                is_completed=True,
-            )
-            pet.add_task(completed_feed)
-
-    def play_with_pet(self, pet: Pet) -> None:
-        play_tasks = [t for t in pet.tasks if t.type ==
-                      TaskType.PLAY and not t.is_completed]
-        if play_tasks:
-            for t in play_tasks:
-                t.execute()
-        else:
-            completed_play = Task(
-                description=f"Play with {pet.name}",
-                due_date=datetime.now(),
-                priority=Priority.MEDIUM,
-                type=TaskType.PLAY,
-                pet=pet,
-                duration=20,
-                is_completed=True,
-            )
-            pet.add_task(completed_play)
 
 
 @dataclass
@@ -347,11 +335,13 @@ class Scheduler:
     tasks: list[Task] = field(default_factory=list)
 
     def _resolve_tasks(self, owner: Owner | None = None) -> list[Task]:
-        # Prioritize owner method for multi-pet tasks
         active_owner = owner or self.owner
-        if active_owner is not None:
-            return active_owner.get_all_tasks()
-        return list(self.tasks)
+        candidates = (active_owner.get_all_tasks() if active_owner else []) + self.tasks
+        resolved: list[Task] = []
+        for t in candidates:
+            if t not in resolved:
+                resolved.append(t)
+        return resolved
 
     def schedule_task(self, task: Task) -> None:
         if task not in self.tasks:
@@ -361,8 +351,11 @@ class Scheduler:
 
     def complete_task(self, task: Task) -> Task | None:
         next_task = task.mark_complete()
-        if next_task and next_task not in self.tasks:
-            self.tasks.append(next_task)
+        if next_task:
+            if next_task not in self.tasks:
+                self.tasks.append(next_task)
+            if self.owner and next_task.pet and next_task.pet not in self.owner.pets:
+                self.owner.add_pet(next_task.pet)
         return next_task
 
     def organize_tasks(
@@ -397,14 +390,7 @@ class Scheduler:
         if target_status is not None:
             task_list = [t for t in task_list if t.is_completed == target_status]
 
-        def _sort_key(t: Task):
-            val = t.time
-            if isinstance(val, str):
-                return [int(p) for p in val.split(":")]
-            return val
-
-        return sorted(task_list, key=_sort_key)
-
+        return sorted(task_list, key=lambda t: t.due_date)
 
     def see_todays_tasks(
         self, owner: Owner | None = None, target_date: datetime | date | None = None
@@ -475,10 +461,6 @@ class Scheduler:
                         )
 
         return warnings
-
-    def check_conflicts(self, owner: Owner | None = None) -> list[str]:
-        return self.get_conflict_warnings(owner)
-
 
     def suggest_time_slot(
         self,

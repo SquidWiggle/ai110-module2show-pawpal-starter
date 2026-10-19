@@ -488,5 +488,210 @@ def test_scheduler_no_conflict_warnings():
     assert warnings == []
 
 
+def test_timeslot_overlaps_weekly_and_monthly():
+    # Weekly slot: Tuesday 2026-10-13 14:00 to 15:00
+    weekly_slot = TimeSlot(
+        start_time=datetime(2026, 10, 13, 14, 0),
+        duration=60,
+        recurrence=Recurrence.WEEKLY,
+    )
+    # Overlapping slot on next Tuesday 2026-10-20 14:30-15:30
+    next_tuesday_slot = TimeSlot(
+        start_time=datetime(2026, 10, 20, 14, 30),
+        duration=60,
+    )
+    # Non-overlapping slot on Wednesday 2026-10-21 14:00-15:00
+    wednesday_slot = TimeSlot(
+        start_time=datetime(2026, 10, 21, 14, 0),
+        duration=60,
+    )
+    assert weekly_slot.overlaps(next_tuesday_slot) is True
+    assert next_tuesday_slot.overlaps(weekly_slot) is True
+    assert weekly_slot.overlaps(wednesday_slot) is False
+    assert wednesday_slot.overlaps(weekly_slot) is False
+
+    # Monthly slot: 15th of month 10:00 to 11:00 starting 2026-09-15
+    monthly_slot = TimeSlot(
+        start_time=datetime(2026, 9, 15, 10, 0),
+        duration=60,
+        recurrence=Recurrence.MONTHLY,
+    )
+    # Overlapping slot on next month 2026-10-15 10:30-11:30
+    next_month_slot = TimeSlot(
+        start_time=datetime(2026, 10, 15, 10, 30),
+        duration=60,
+    )
+    # Non-overlapping slot on 2026-10-16 10:00-11:00
+    different_day_slot = TimeSlot(
+        start_time=datetime(2026, 10, 16, 10, 0),
+        duration=60,
+    )
+    assert monthly_slot.overlaps(next_month_slot) is True
+    assert next_month_slot.overlaps(monthly_slot) is True
+    assert monthly_slot.overlaps(different_day_slot) is False
+    assert different_day_slot.overlaps(monthly_slot) is False
+
+    # Both recurring: Weekly vs Weekly
+    weekly_same_day = TimeSlot(
+        start_time=datetime(2026, 10, 20, 14, 30),
+        duration=30,
+        recurrence=Recurrence.WEEKLY,
+    )
+    weekly_diff_day = TimeSlot(
+        start_time=datetime(2026, 10, 21, 14, 0),
+        duration=60,
+        recurrence=Recurrence.WEEKLY,
+    )
+    assert weekly_slot.overlaps(weekly_same_day) is True
+    assert weekly_same_day.overlaps(weekly_slot) is True
+    assert weekly_slot.overlaps(weekly_diff_day) is False
+
+    # Both recurring: Monthly vs Monthly
+    monthly_same_day = TimeSlot(
+        start_time=datetime(2026, 10, 15, 10, 30),
+        duration=30,
+        recurrence=Recurrence.MONTHLY,
+    )
+    monthly_diff_day = TimeSlot(
+        start_time=datetime(2026, 10, 16, 10, 0),
+        duration=60,
+        recurrence=Recurrence.MONTHLY,
+    )
+    assert monthly_slot.overlaps(monthly_same_day) is True
+    assert monthly_same_day.overlaps(monthly_slot) is True
+    assert monthly_slot.overlaps(monthly_diff_day) is False
+
+
+def test_daily_recurrence_does_not_overlap_or_block_prior_dates():
+    start_dt = datetime(2026, 10, 19, 9, 0)
+    daily_slot = TimeSlot(
+        start_time=start_dt,
+        duration=480,
+        recurrence=Recurrence.DAILY,
+    )
+    prior_slot = TimeSlot(
+        start_time=datetime(2026, 10, 18, 10, 0),
+        duration=60,
+    )
+    same_day_slot = TimeSlot(
+        start_time=datetime(2026, 10, 19, 10, 0),
+        duration=60,
+    )
+    future_day_slot = TimeSlot(
+        start_time=datetime(2026, 10, 20, 10, 0),
+        duration=60,
+    )
+
+    assert daily_slot.overlaps(prior_slot) is False
+    assert prior_slot.overlaps(daily_slot) is False
+    assert daily_slot.overlaps(same_day_slot) is True
+    assert daily_slot.overlaps(future_day_slot) is True
+
+    # Owner blocked times does not block dates prior to start date
+    owner = Owner(name="Jordan", blocked_times=[daily_slot])
+    avail_prior = owner.get_available_times(
+        datetime(2026, 10, 17, 0, 0), datetime(2026, 10, 18, 0, 0)
+    )
+    assert len(avail_prior) == 1
+    assert avail_prior[0].start_time == datetime(2026, 10, 17, 0, 0)
+    assert avail_prior[0].end_time == datetime(2026, 10, 18, 0, 0)
+
+
+def test_petless_and_newly_added_pet_tasks_in_owner_and_scheduler():
+    owner = Owner(name="Alex")
+    today = datetime.now()
+
+    # Pet-less task scheduled directly on owner
+    petless_task = Task(description="Buy pet shampoo", due_date=today, pet=None)
+    owner.schedule_task(petless_task)
+
+    assert petless_task in owner.get_all_tasks()
+    todays_tasks = owner.scheduler.see_todays_tasks()
+    assert petless_task in todays_tasks
+
+    # Task with a new pet not previously added to owner.pets
+    new_pet = Pet(name="Coco", species="Dog", breed="Poodle")
+    assert new_pet not in owner.pets
+
+    pet_task = Task(description="Annual vaccination", due_date=today, pet=new_pet)
+    owner.schedule_task(pet_task)
+
+    assert new_pet in owner.pets
+    assert pet_task in new_pet.tasks
+    assert pet_task in owner.get_all_tasks()
+    todays_tasks_after = owner.scheduler.see_todays_tasks()
+    assert pet_task in todays_tasks_after
+
+
+def test_string_time_assignment_sort_by_time_and_end_time():
+    scheduler = Scheduler()
+    base_date = datetime(2026, 10, 19, 10, 0)
+
+    # String time in constructor
+    t_str = Task(description="Task from str", time="14:00")
+    assert isinstance(t_str.due_date, datetime)
+    assert t_str.due_date.hour == 14
+    assert t_str.due_date.minute == 0
+    assert isinstance(t_str.end_time, datetime)
+    assert t_str.end_time == t_str.due_date + timedelta(minutes=t_str.duration)
+
+    # Property setter with string time preserves base date
+    t_prop = Task(description="Task setter", due_date=base_date)
+    t_prop.time = "09:15"
+    assert isinstance(t_prop.due_date, datetime)
+    assert t_prop.due_date.date() == base_date.date()
+    assert t_prop.due_date.hour == 9
+    assert t_prop.due_date.minute == 15
+    assert isinstance(t_prop.end_time, datetime)
+
+    # Mixed list of tasks: datetime vs string assigned
+    t1 = Task(description="Walk", due_date=datetime(2026, 10, 19, 16, 0))
+    t2 = Task(description="Feed", due_date=datetime(2026, 10, 19, 8, 0))
+    t2.time = "08:00"
+    t3 = Task(description="Groom", due_date=datetime(2026, 10, 19, 12, 0))
+
+    sorted_tasks = scheduler.sort_by_time([t1, t2, t3])
+    assert sorted_tasks == [t2, t3, t1]
+
+
+def test_scheduler_complete_task_recurring_pet_none_and_auto_adds_pet():
+    owner = Owner(name="Sam")
+    today = datetime.now()
+
+    # Recurring task with pet=None
+    petless_recurring = Task(
+        description="Filter change",
+        due_date=today,
+        recurrence=Recurrence.DAILY,
+        pet=None,
+    )
+    owner.schedule_task(petless_recurring)
+
+    next_task = owner.scheduler.complete_task(petless_recurring)
+    assert petless_recurring.is_completed is True
+    assert next_task is not None
+    assert next_task.is_completed is False
+    assert next_task.pet is None
+    assert next_task in owner.scheduler.tasks
+    assert next_task in owner.get_all_tasks()
+
+    # Recurring task with a new pet not in owner.pets adds pet to owner.pets
+    unregistered_pet = Pet(name="Nemo", species="Fish", breed="Clownfish")
+    assert unregistered_pet not in owner.pets
+
+    fish_task = Task(
+        description="Clean tank",
+        due_date=today,
+        recurrence=Recurrence.WEEKLY,
+        pet=unregistered_pet,
+    )
+    next_fish_task = owner.scheduler.complete_task(fish_task)
+    assert next_fish_task is not None
+    assert unregistered_pet in owner.pets
+    assert next_fish_task in unregistered_pet.tasks
+    assert next_fish_task in owner.get_all_tasks()
+
+
+
 
 
