@@ -86,6 +86,7 @@ Scheduler:
 **a. How you used AI**
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
+I used AI to brainstorm, improve, and enrich my system design.
 - What kinds of prompts or questions were most helpful?
 
 **b. Judgment and verification**

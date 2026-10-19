@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 
 
@@ -36,17 +36,109 @@ class Pet:
     species: str
     breed: str
     required_care: list[TaskType] = field(default_factory=list)
+    tasks: list["Task"] = field(default_factory=list)
+
+    def add_task(self, task: "Task") -> None:
+        if task not in self.tasks:
+            self.tasks.append(task)
+        if task.pet is not self:
+            task.pet = self
+
+    def get_tasks(self) -> list["Task"]:
+        return list(self.tasks)
 
 
 @dataclass
 class Task:
-    due_date: datetime
-    priority: Priority
-    type: TaskType
-    pet: Pet
-    duration: int
+    description: str = ""
+    due_date: datetime = field(default_factory=datetime.now)
+    priority: Priority = Priority.MEDIUM
+    type: TaskType = TaskType.WALKS
+    pet: Pet | None = None
+    duration: int = 30
     recurrence: Recurrence | None = None
     is_completed: bool = False
+
+    def __init__(
+        self,
+        arg1: str | datetime | None = None,
+        due_date: datetime | None = None,
+        priority: Priority | str = Priority.MEDIUM,
+        type: TaskType | str = TaskType.WALKS,
+        pet: Pet | None = None,
+        duration: int = 30,
+        recurrence: Recurrence | str | None = None,
+        is_completed: bool = False,
+        description: str = "",
+        time: datetime | None = None,
+        frequency: Recurrence | str | None = None,
+        completion_status: bool | None = None,
+    ):
+        # Support positional datetime from earlier stub
+        if isinstance(arg1, datetime):
+            self.due_date = arg1
+            self.description = description
+        elif isinstance(arg1, str):
+            self.description = arg1
+            self.due_date = due_date or time or datetime.now()
+        else:
+            self.description = description
+            self.due_date = due_date or time or datetime.now()
+
+        if isinstance(priority, str):
+            self.priority = Priority(priority.upper())
+        else:
+            self.priority = priority
+
+        if isinstance(type, str):
+            self.type = TaskType(type.upper())
+        else:
+            self.type = type
+
+        self.pet = pet
+        self.duration = duration
+
+        rec = frequency if frequency is not None else recurrence
+        if isinstance(rec, str):
+            self.recurrence = Recurrence(rec.upper())
+        else:
+            self.recurrence = rec
+
+        if completion_status is not None:
+            self.is_completed = completion_status
+        else:
+            self.is_completed = is_completed
+
+        if not self.description:
+            self.description = self.type.value if hasattr(self.type, "value") else str(self.type)
+
+    @property
+    def time(self) -> datetime:
+        return self.due_date
+
+    @time.setter
+    def time(self, val: datetime) -> None:
+        self.due_date = val
+
+    @property
+    def frequency(self) -> Recurrence | None:
+        return self.recurrence
+
+    @frequency.setter
+    def frequency(self, val: Recurrence | None) -> None:
+        self.recurrence = val
+
+    @property
+    def completion_status(self) -> bool:
+        return self.is_completed
+
+    @completion_status.setter
+    def completion_status(self, val: bool) -> None:
+        self.is_completed = val
+
+    @property
+    def end_time(self) -> datetime:
+        return self.due_date + timedelta(minutes=self.duration)
 
     def execute(self) -> None:
         self.is_completed = True
@@ -58,34 +150,134 @@ class Owner:
     pets: list[Pet] = field(default_factory=list)
     available_times: list[TimeSlot] = field(default_factory=list)
 
-    def schedule_task(self, scheduler: "Scheduler", task: Task) -> None:
-        pass
-
     def add_pet(self, pet: Pet) -> None:
-        pass
+        if pet not in self.pets:
+            self.pets.append(pet)
+
+    def get_all_tasks(self) -> list[Task]:
+        # Aggregate tasks across every pet
+        all_tasks: list[Task] = []
+        for pet in self.pets:
+            all_tasks.extend(pet.tasks)
+        return all_tasks
+
+    def schedule_task(self, scheduler: "Scheduler", task: Task) -> None:
+        if task.pet and task.pet in self.pets and task not in task.pet.tasks:
+            task.pet.add_task(task)
+        scheduler.schedule_task(task)
 
     def feed_pet(self, pet: Pet) -> None:
-        pass
+        feed_tasks = [t for t in pet.tasks if t.type == TaskType.FEEDINGS and not t.is_completed]
+        if feed_tasks:
+            for t in feed_tasks:
+                t.execute()
+        else:
+            completed_feed = Task(
+                description=f"Feeding {pet.name}",
+                due_date=datetime.now(),
+                priority=Priority.HIGH,
+                type=TaskType.FEEDINGS,
+                pet=pet,
+                duration=15,
+                is_completed=True,
+            )
+            pet.add_task(completed_feed)
 
     def play_with_pet(self, pet: Pet) -> None:
-        pass
+        play_tasks = [t for t in pet.tasks if t.type == TaskType.PLAY and not t.is_completed]
+        if play_tasks:
+            for t in play_tasks:
+                t.execute()
+        else:
+            completed_play = Task(
+                description=f"Play with {pet.name}",
+                due_date=datetime.now(),
+                priority=Priority.MEDIUM,
+                type=TaskType.PLAY,
+                pet=pet,
+                duration=20,
+                is_completed=True,
+            )
+            pet.add_task(completed_play)
 
 
 @dataclass
 class Scheduler:
+    owner: Owner | None = None
     tasks: list[Task] = field(default_factory=list)
 
+    def _resolve_tasks(self, owner: Owner | None = None) -> list[Task]:
+        # Prioritize owner method for multi-pet tasks
+        active_owner = owner or self.owner
+        if active_owner is not None:
+            return active_owner.get_all_tasks()
+        return list(self.tasks)
+
     def schedule_task(self, task: Task) -> None:
-        pass
+        if task not in self.tasks:
+            self.tasks.append(task)
+        if task.pet and task not in task.pet.tasks:
+            task.pet.add_task(task)
 
-    def see_todays_tasks(self) -> list[Task]:
-        pass
+    def organize_tasks(
+        self, tasks: list[Task] | None = None, owner: Owner | None = None
+    ) -> list[Task]:
+        task_list = tasks if tasks is not None else self._resolve_tasks(owner)
+        priority_weights = {Priority.HIGH: 0, Priority.MEDIUM: 1, Priority.LOW: 2}
+        return sorted(
+            task_list,
+            key=lambda t: (
+                priority_weights.get(t.priority, 1),
+                t.due_date,
+            ),
+        )
 
-    def alert_conflict(self, available_times: list[TimeSlot] | None = None) -> None:
-        pass
+    def see_todays_tasks(
+        self, owner: Owner | None = None, target_date: datetime | None = None
+    ) -> list[Task]:
+        check_date = target_date.date() if target_date else datetime.now().date()
+        tasks = self._resolve_tasks(owner)
+        todays = [t for t in tasks if t.due_date.date() == check_date]
+        return self.organize_tasks(todays)
+
+    def alert_conflict(
+        self,
+        available_times: list[TimeSlot] | None = None,
+        owner: Owner | None = None,
+    ) -> list[tuple[Task, Task]]:
+        tasks = [t for t in self._resolve_tasks(owner) if not t.is_completed]
+        conflicts: list[tuple[Task, Task]] = []
+        for i in range(len(tasks)):
+            for j in range(i + 1, len(tasks)):
+                t1, t2 = tasks[i], tasks[j]
+                if t1.due_date < t2.end_time and t2.due_date < t1.end_time:
+                    conflicts.append((t1, t2))
+        return conflicts
 
     def suggest_time_slot(
-        self, duration_minutes: int, available_times: list[TimeSlot]
+        self,
+        duration_minutes: int,
+        available_times: list[TimeSlot] | None = None,
+        owner: Owner | None = None,
     ) -> TimeSlot | None:
-        pass
+        slots = available_times or (self.owner.available_times if self.owner else [])
+        if not slots:
+            return None
 
+        tasks = [t for t in self._resolve_tasks(owner) if not t.is_completed]
+        needed_duration = timedelta(minutes=duration_minutes)
+
+        for slot in slots:
+            candidate_start = slot.start_time
+            while candidate_start + needed_duration <= slot.end_time:
+                candidate_end = candidate_start + needed_duration
+                # Check for overlap with scheduled tasks
+                overlap = False
+                for task in tasks:
+                    if candidate_start < task.end_time and task.due_date < candidate_end:
+                        overlap = True
+                        candidate_start = task.end_time
+                        break
+                if not overlap:
+                    return TimeSlot(candidate_start, candidate_end)
+        return None

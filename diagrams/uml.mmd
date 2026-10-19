@@ -10,8 +10,9 @@ classDiagram
         +String name
         +List~Pet~ pets
         +List~TimeSlot~ available_times
-        +schedule_task(scheduler: Scheduler, task: Task)
         +add_pet(pet: Pet)
+        +get_all_tasks() List~Task~
+        +schedule_task(scheduler: Scheduler, task: Task)
         +feed_pet(pet: Pet)
         +play_with_pet(pet: Pet)
     }
@@ -21,9 +22,13 @@ classDiagram
         +String species
         +String breed
         +List~TaskType~ required_care
+        +List~Task~ tasks
+        +add_task(task: Task)
+        +get_tasks() List~Task~
     }
 
     class Task {
+        +String description
         +DateTime due_date
         +Priority priority
         +TaskType type
@@ -35,8 +40,10 @@ classDiagram
     }
 
     class Scheduler {
+        +Owner owner
         +List~Task~ tasks
         +schedule_task(task: Task)
+        +organize_tasks() List~Task~
         +see_todays_tasks() List~Task~
         +alert_conflict(available_times: List~TimeSlot~)
         +suggest_time_slot(duration_minutes: int, available_times: List~TimeSlot~) TimeSlot
@@ -69,7 +76,9 @@ classDiagram
     Owner "1" o-- "0..*" Pet : owns
     Owner "1" o-- "0..*" TimeSlot : has
     Owner ..> Scheduler : uses
+    Pet "1" o-- "0..*" Task : has
     Scheduler "1" o-- "0..*" Task : manages
+    Scheduler ..> Owner : queries
     Scheduler ..> TimeSlot : evaluates
     Task "0..*" --> "1" Pet : targets
     Task ..> Priority
