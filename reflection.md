@@ -77,7 +77,9 @@ Scheduler:
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
+  - I was presented with changes to the conflict detection algorithm in Scheduler.alert_conflict and Scheduler.get_conflict_warnings by AI. I can choose either improving it with itertools for readability, or using High-Performance Sweep-Line (O(N log N)) to speed it up. I chosed the itertools version for readability.
 - Why is that tradeoff reasonable for this scenario?
+  -  Yes because when N<20, which is the case here where number of task is for one pet owner, the difference is negligible.
 
 ---
 

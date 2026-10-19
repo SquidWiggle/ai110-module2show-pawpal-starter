@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, time, date
 from enum import Enum
+from itertools import combinations
 
 
 class Priority(Enum):
@@ -430,11 +431,9 @@ class Scheduler:
         active_owner = owner or self.owner
         tasks = [t for t in self._resolve_tasks(owner) if not t.is_completed]
         conflicts: list[tuple[Task, Task | TimeSlot]] = []
-        for i in range(len(tasks)):
-            for j in range(i + 1, len(tasks)):
-                t1, t2 = tasks[i], tasks[j]
-                if t1.time_slot.overlaps(t2.time_slot):
-                    conflicts.append((t1, t2))
+        for t1, t2 in combinations(tasks, 2):
+            if t1.time_slot.overlaps(t2.time_slot):
+                conflicts.append((t1, t2))
         if active_owner is not None:
             for task in tasks:
                 for blocked in active_owner.blocked_times:
@@ -447,24 +446,22 @@ class Scheduler:
         tasks = [t for t in self._resolve_tasks(owner) if not t.is_completed]
         warnings: list[str] = []
 
-        for i in range(len(tasks)):
-            for j in range(i + 1, len(tasks)):
-                t1, t2 = tasks[i], tasks[j]
-                if t1.time_slot.overlaps(t2.time_slot):
-                    t1_pet = t1.pet.name if t1.pet else "Unassigned"
-                    t2_pet = t2.pet.name if t2.pet else "Unassigned"
-                    time_info = f"{t1.due_date.strftime('%H:%M')} - {t1.end_time.strftime('%H:%M')}"
-                    if t1.pet and t2.pet and t1.pet == t2.pet:
-                        warnings.append(
-                            f"⚠️ [Same-Pet Conflict] {t1_pet} is double-booked: "
-                            f"'{t1.description}' and '{t2.description}' overlap around {time_info}."
-                        )
-                    else:
-                        warnings.append(
-                            f"⚠️ [Concurrent Care Conflict] Overlapping pet tasks: "
-                            f"{t1_pet} ('{t1.description}') and {t2_pet} ('{t2.description}') "
-                            f"overlap around {time_info}."
-                        )
+        for t1, t2 in combinations(tasks, 2):
+            if t1.time_slot.overlaps(t2.time_slot):
+                t1_pet = t1.pet.name if t1.pet else "Unassigned"
+                t2_pet = t2.pet.name if t2.pet else "Unassigned"
+                time_info = f"{t1.due_date.strftime('%H:%M')} - {t1.end_time.strftime('%H:%M')}"
+                if t1.pet and t2.pet and t1.pet == t2.pet:
+                    warnings.append(
+                        f"⚠️ [Same-Pet Conflict] {t1_pet} is double-booked: "
+                        f"'{t1.description}' and '{t2.description}' overlap around {time_info}."
+                    )
+                else:
+                    warnings.append(
+                        f"⚠️ [Concurrent Care Conflict] Overlapping pet tasks: "
+                        f"{t1_pet} ('{t1.description}') and {t2_pet} ('{t2.description}') "
+                        f"overlap around {time_info}."
+                    )
 
         if active_owner is not None:
             for task in tasks:
