@@ -223,3 +223,80 @@ def test_pet_task_addition_count_increase():
     pet.add_task(task1)
     assert len(pet.get_tasks()) == 2
 
+
+def test_suggest_time_slot_recurring_historical_date():
+    historical_date = datetime(2024, 6, 1, 9, 0)
+    current_date = datetime(2026, 10, 19, 0, 0)
+    owner = Owner(
+        name="Morgan",
+        blocked_times=[
+            TimeSlot(
+                start_time=historical_date,
+                duration=480,  # 09:00 to 17:00
+                recurrence=Recurrence.DAILY,
+                description="Work",
+            )
+        ],
+    )
+    scheduler = Scheduler(owner=owner)
+    available = [TimeSlot(current_date, current_date + timedelta(days=1))]
+
+    suggested = scheduler.suggest_time_slot(duration_minutes=60, available_times=available)
+    assert suggested is not None
+    assert suggested.start_time.year == 2026
+    assert suggested.start_time == current_date
+
+
+def test_owner_get_available_times_multi_day_and_weekly():
+    start_date = datetime(2026, 10, 19, 0, 0)
+    end_date = start_date + timedelta(days=3)
+    owner = Owner(
+        name="Taylor",
+        blocked_times=[
+            TimeSlot(
+                start_time=start_date,
+                duration=480,
+                recurrence=Recurrence.DAILY,
+                description="Sleep",
+            ),
+            TimeSlot(
+                start_time=datetime(2024, 1, 2, 14, 0),  # Tuesday
+                duration=60,
+                recurrence=Recurrence.WEEKLY,
+                description="Tuesday Meeting",
+            ),
+        ],
+    )
+
+    available = owner.get_available_times(start_date, end_date)
+    tuesday_meeting = TimeSlot(datetime(2026, 10, 20, 14, 0), datetime(2026, 10, 20, 15, 0))
+    for slot in available:
+        assert not slot.overlaps(tuesday_meeting)
+
+
+def test_timeslot_overlaps_overnight_daily():
+    sleep_slot = TimeSlot(
+        start_time=datetime(2026, 10, 19, 22, 0),
+        duration=480,
+        recurrence=Recurrence.DAILY,
+    )
+    late_task = TimeSlot(
+        start_time=datetime(2026, 10, 19, 23, 0),
+        duration=30,
+    )
+    early_task = TimeSlot(
+        start_time=datetime(2026, 10, 19, 4, 0),
+        duration=60,
+    )
+    day_task = TimeSlot(
+        start_time=datetime(2026, 10, 19, 10, 0),
+        duration=60,
+    )
+
+    assert sleep_slot.overlaps(late_task) is True
+    assert late_task.overlaps(sleep_slot) is True
+    assert sleep_slot.overlaps(early_task) is True
+    assert early_task.overlaps(sleep_slot) is True
+    assert sleep_slot.overlaps(day_task) is False
+    assert day_task.overlaps(sleep_slot) is False
+

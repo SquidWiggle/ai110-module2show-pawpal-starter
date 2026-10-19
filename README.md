@@ -80,20 +80,20 @@ Sample test output:
 platform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0
 rootdir: /Users/sameen/CodePath/ai110-module2show-pawpal-starter
 plugins: cov-7.1.0, anyio-4.15.1
-collecting ... collected 10 items
+collecting ... collected 15 items
 
-test_pawpal.py ..........                                                [100%]
+test_pawpal.py ...............                                           [100%]
 
 ================================ tests coverage ================================
 ______________ coverage: platform darwin, python 3.13.15-final-0 _______________
 
 Name               Stmts   Miss  Cover
 --------------------------------------
-pawpal_system.py     255     54    79%
-test_pawpal.py       113      0   100%
+pawpal_system.py     278     56    80%
+test_pawpal.py       162      0   100%
 --------------------------------------
-TOTAL                368     54    85%
-============================== 10 passed in 0.26s ===============================
+TOTAL                440     56    87%
+============================== 15 passed in 0.40s ===============================
 ```
 
 ## 📐 Smarter Scheduling

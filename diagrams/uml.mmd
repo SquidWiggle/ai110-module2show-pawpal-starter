@@ -20,7 +20,7 @@ classDiagram
         +block_time(start_time: DateTime, duration: int, recurrence: Recurrence, description: String) TimeSlot
         +get_available_times(start: DateTime, end: DateTime) List~TimeSlot~
         +get_all_tasks() List~Task~
-        +schedule_task(task: Task, scheduler: Scheduler)
+        +schedule_task(task: Task, scheduler: Scheduler = null)
         +feed_pet(pet: Pet)
         +play_with_pet(pet: Pet)
     }
@@ -46,6 +46,7 @@ classDiagram
         +bool is_completed
         +TimeSlot time_slot
         +execute()
+        +mark_complete()
     }
 
     class Scheduler {

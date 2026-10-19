@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time, date
 from enum import Enum
 
 
@@ -49,7 +49,14 @@ class TimeSlot:
         if self.recurrence == Recurrence.DAILY or other.recurrence == Recurrence.DAILY:
             s1, e1 = self.start_time.time(), self.end_time.time()
             s2, e2 = other.start_time.time(), other.end_time.time()
-            return s1 < e2 and s2 < e1
+
+            def _daily_segments(s: time, e: time) -> list[tuple[time, time]]:
+                return [(s, time.max), (time.min, e)] if s > e else [(s, e)]
+
+            for a_s, a_e in _daily_segments(s1, e1):
+                for b_s, b_e in _daily_segments(s2, e2):
+                    if a_s < b_e and b_s < a_e:
+                        return True
         return False
 
 
@@ -208,12 +215,24 @@ class Owner:
         for b in self.blocked_times:
             if b.end_time is None:
                 continue
-            if b.recurrence == Recurrence.DAILY:
-                b_start = datetime.combine(start.date(), b.start_time.time())
-                b_end = b_start + timedelta(minutes=b.duration or int((b.end_time - b.start_time).total_seconds() // 60))
-                relevant_blocks.append((b_start, b_end))
+            if b.recurrence in (Recurrence.DAILY, Recurrence.WEEKLY, Recurrence.MONTHLY):
+                block_dur = b.duration or int((b.end_time - b.start_time).total_seconds() // 60)
+                curr = start.date() - timedelta(days=1)
+                while curr <= end.date():
+                    match = (
+                        b.recurrence == Recurrence.DAILY
+                        or (b.recurrence == Recurrence.WEEKLY and curr.weekday() == b.start_time.weekday())
+                        or (b.recurrence == Recurrence.MONTHLY and curr.day == b.start_time.day)
+                    )
+                    if match:
+                        b_start = datetime.combine(curr, b.start_time.time())
+                        b_end = b_start + timedelta(minutes=block_dur)
+                        if b_start < end and b_end > start:
+                            relevant_blocks.append((max(start, b_start), min(end, b_end)))
+                    curr += timedelta(days=1)
             else:
-                relevant_blocks.append((b.start_time, b.end_time))
+                if b.start_time < end and b.end_time > start:
+                    relevant_blocks.append((max(start, b.start_time), min(end, b.end_time)))
 
         for b_start, b_end in sorted(relevant_blocks, key=lambda x: x[0]):
             new_free = []
@@ -317,9 +336,18 @@ class Scheduler:
         )
 
     def see_todays_tasks(
-        self, owner: Owner | None = None, target_date: datetime | None = None
+        self, owner: Owner | None = None, target_date: datetime | date | None = None
     ) -> list[Task]:
-        check_date = target_date.date() if target_date else datetime.now().date()
+        if target_date is None:
+            check_date = datetime.now().date()
+        elif isinstance(target_date, datetime):
+            check_date = target_date.date()
+        elif isinstance(target_date, date):
+            check_date = target_date
+        elif hasattr(target_date, "date"):
+            check_date = target_date.date()
+        else:
+            check_date = target_date
         tasks = self._resolve_tasks(owner)
         todays = [t for t in tasks if t.due_date.date() == check_date]
         return self.organize_tasks(todays)
@@ -372,14 +400,23 @@ class Scheduler:
                 for task in tasks:
                     if candidate_slot.overlaps(task.time_slot):
                         overlap = True
-                        candidate_start = task.end_time
+                        candidate_start = max(task.end_time, candidate_start + timedelta(minutes=15))
                         break
                 if overlap:
                     continue
                 for blocked in blocked_times:
                     if candidate_slot.overlaps(blocked):
                         overlap = True
-                        candidate_start = blocked.end_time
+                        prev_start = candidate_start
+                        if blocked.recurrence == Recurrence.DAILY and blocked.end_time:
+                            proj_end = datetime.combine(candidate_start.date(), blocked.end_time.time())
+                            if proj_end <= candidate_start:
+                                proj_end += timedelta(days=1)
+                            candidate_start = proj_end
+                        else:
+                            candidate_start = blocked.end_time or (candidate_start + timedelta(minutes=15))
+                        if candidate_start <= prev_start:
+                            candidate_start = prev_start + timedelta(minutes=15)
                         break
                 if not overlap:
                     return candidate_slot

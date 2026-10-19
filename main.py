@@ -59,14 +59,13 @@ def main():
     owner_1.schedule_task(feed_cat)
     owner_1.schedule_task(feed_dog)
     owner_1.schedule_task(walk_dog)
-    print("Current scheduled Tasks:")
+    print("Scheduled Tasks:")
     print(f"{'Time':<17} {'Task':<15} {'Pet':<10} {'Duration':<10} {'Priority'}")
     print("-" * 60)
     for task in owner_1.get_all_tasks():
         pet_name = task.pet.name if task.pet else "N/A"
         time_str = task.due_date.strftime("%Y-%m-%d %H:%M")
-        print(f"{time_str:<17} {task.description:<15} {pet_name:<10} {f'{task.duration}m':<10} {
-              task.priority.value}")
+        print(f"{time_str:<17} {task.description:<15} {pet_name:<10} {f'{task.duration}m':<10} {task.priority.value}")
 
 
 if __name__ == "__main__":
