@@ -442,6 +442,47 @@ class Scheduler:
                         conflicts.append((task, blocked))
         return conflicts
 
+    def get_conflict_warnings(self, owner: Owner | None = None) -> list[str]:
+        active_owner = owner or self.owner
+        tasks = [t for t in self._resolve_tasks(owner) if not t.is_completed]
+        warnings: list[str] = []
+
+        for i in range(len(tasks)):
+            for j in range(i + 1, len(tasks)):
+                t1, t2 = tasks[i], tasks[j]
+                if t1.time_slot.overlaps(t2.time_slot):
+                    t1_pet = t1.pet.name if t1.pet else "Unassigned"
+                    t2_pet = t2.pet.name if t2.pet else "Unassigned"
+                    time_info = f"{t1.due_date.strftime('%H:%M')} - {t1.end_time.strftime('%H:%M')}"
+                    if t1.pet and t2.pet and t1.pet == t2.pet:
+                        warnings.append(
+                            f"⚠️ [Same-Pet Conflict] {t1_pet} is double-booked: "
+                            f"'{t1.description}' and '{t2.description}' overlap around {time_info}."
+                        )
+                    else:
+                        warnings.append(
+                            f"⚠️ [Concurrent Care Conflict] Overlapping pet tasks: "
+                            f"{t1_pet} ('{t1.description}') and {t2_pet} ('{t2.description}') "
+                            f"overlap around {time_info}."
+                        )
+
+        if active_owner is not None:
+            for task in tasks:
+                for blocked in active_owner.blocked_times:
+                    if task.time_slot.overlaps(blocked):
+                        pet_name = task.pet.name if task.pet else "Task"
+                        block_desc = blocked.description or "Blocked Time"
+                        warnings.append(
+                            f"⚠️ [Blocked Time Collision] {pet_name} task '{task.description}' "
+                            f"collides with owner's {block_desc} schedule."
+                        )
+
+        return warnings
+
+    def check_conflicts(self, owner: Owner | None = None) -> list[str]:
+        return self.get_conflict_warnings(owner)
+
+
     def suggest_time_slot(
         self,
         duration_minutes: int,

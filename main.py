@@ -87,6 +87,26 @@ def main():
         duration=15,
         is_completed=False,
     )
+    # Conflicting task 1: Same pet (Pochi) double-booked at 08:30
+    t_clash_dog_walk = Task(
+        description='Morning Walk (Clash)',
+        due_date=datetime(2024, 6, 1, 8, 30),
+        priority=Priority.HIGH,
+        type=TaskType.WALKS,
+        pet=dog_1,
+        duration=30,
+        is_completed=False,
+    )
+    # Conflicting task 2: Concurrent pet care at 19:00 during Pochi's evening walk
+    t_clash_cat_feed = Task(
+        description='Feed Tama (Clash)',
+        due_date=datetime(2024, 6, 1, 19, 0),
+        priority=Priority.MEDIUM,
+        type=TaskType.FEEDINGS,
+        pet=cat,
+        duration=15,
+        is_completed=False,
+    )
 
     # 2. Schedule tasks in scrambled order
     out_of_order_tasks = [
@@ -95,6 +115,8 @@ def main():
         t_afternoon_play,
         t_early_med_cat,
         t_morning_feed_dog,
+        t_clash_dog_walk,
+        t_clash_cat_feed,
     ]
     for task in out_of_order_tasks:
         owner_1.schedule_task(task)
@@ -110,6 +132,16 @@ def main():
     _print_tasks("5. Filtered: Pochi Completed Only",
                  owner_1.scheduler.sort_by_time(pet=dog_1, is_completed=True))
 
+    # 4. Conflict detection verification
+    print("\n--- 6. Conflict Detection Warnings ---")
+    warnings = owner_1.scheduler.get_conflict_warnings()
+    if warnings:
+        for warning in warnings:
+            print(warning)
+    else:
+        print("No conflicts detected.")
+
 
 if __name__ == "__main__":
     main()
+

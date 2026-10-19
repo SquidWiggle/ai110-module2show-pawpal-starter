@@ -447,4 +447,46 @@ def test_scheduler_complete_task_registers_next_instance():
     assert scheduler.tasks[-1] is next_task
 
 
+def test_scheduler_conflict_warnings_same_pet():
+    scheduler = Scheduler()
+    dog = Pet(name="Pochi", species="Dog", breed="Golden Retriever")
+    t1 = Task(description="Walk", due_date=datetime(2026, 10, 19, 8, 30), duration=30, pet=dog)
+    t2 = Task(description="Feed", due_date=datetime(2026, 10, 19, 8, 30), duration=15, pet=dog)
+    scheduler.schedule_task(t1)
+    scheduler.schedule_task(t2)
+
+    warnings = scheduler.get_conflict_warnings()
+    assert len(warnings) == 1
+    assert "Same-Pet Conflict" in warnings[0]
+    assert "Pochi is double-booked" in warnings[0]
+
+
+def test_scheduler_conflict_warnings_concurrent_pets():
+    scheduler = Scheduler()
+    dog = Pet(name="Pochi", species="Dog", breed="Golden Retriever")
+    cat = Pet(name="Tama", species="Cat", breed="Russian Blue")
+    t1 = Task(description="Dog Walk", due_date=datetime(2026, 10, 19, 10, 0), duration=30, pet=dog)
+    t2 = Task(description="Cat Feed", due_date=datetime(2026, 10, 19, 10, 15), duration=15, pet=cat)
+    scheduler.schedule_task(t1)
+    scheduler.schedule_task(t2)
+
+    warnings = scheduler.get_conflict_warnings()
+    assert len(warnings) == 1
+    assert "Concurrent Care Conflict" in warnings[0]
+    assert "Overlapping pet tasks" in warnings[0]
+
+
+def test_scheduler_no_conflict_warnings():
+    scheduler = Scheduler()
+    dog = Pet(name="Pochi", species="Dog", breed="Golden Retriever")
+    t1 = Task(description="Morning Walk", due_date=datetime(2026, 10, 19, 8, 0), duration=30, pet=dog)
+    t2 = Task(description="Evening Walk", due_date=datetime(2026, 10, 19, 18, 0), duration=30, pet=dog)
+    scheduler.schedule_task(t1)
+    scheduler.schedule_task(t2)
+
+    warnings = scheduler.get_conflict_warnings()
+    assert warnings == []
+
+
+
 
