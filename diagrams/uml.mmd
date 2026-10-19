@@ -15,7 +15,7 @@ classDiagram
         +String name
         +String species
         +String breed
-        +List~String~ required_care
+        +List~TaskType~ required_care
     }
 
     class Task {
@@ -67,4 +67,5 @@ classDiagram
     Task ..> Priority
     Task ..> TaskType
     Task ..> Recurrence
+    Pet ..> TaskType
 ```
