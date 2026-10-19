@@ -91,10 +91,14 @@ Scheduler:
   - During review, I asked AI to generate default time block for Owner's "slepp" time and "work" time so the app become actually useful to the pet owners. AI suggested implementation plan, and helped me evaluate different way of implementations.
 - What kinds of prompts or questions were most helpful?
   - Asking AI to review existing code to catch bugs. Describe use case as specifically as possible.
+  - Evaluate alternative implementations and checking if the implementation is as minimal as possible.
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
+  - I questioned the implementation plan AI suggested and asked to use the same underlying implementation for the feature to block out time periods that are slee/work vs. time periods for Task scheduling. However, after advising subagent on a higher tier model, I agreed because Task have extra fields (is_complete, priority). They will pollute the class if using the same imepleentation. Instead, I suggested to not expose Scheduler class to the user, which was overlooked by the AI reviews.
 - How did you evaluate or verify what the AI suggested?
+  - Run the app manually.
+  - Design test cases and run them in UI.
 
 ---
 
@@ -125,3 +129,4 @@ Scheduler:
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+  - AI is good at pulling in advisor opinions when I have questions.
