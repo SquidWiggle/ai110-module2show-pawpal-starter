@@ -101,12 +101,15 @@ def main():
 
     # 3. Print verification views
     _print_tasks("1. Raw Unsorted Tasks (As Added)", owner_1.get_all_tasks())
-    _print_tasks("2. All Tasks Sorted by Time", owner_1.scheduler.sort_by_time())
-    _print_tasks("3. Filtered: Tama Only (Sorted by Time)", owner_1.scheduler.sort_by_time(pet="Tama"))
-    _print_tasks("4. Filtered: Pending Only (Sorted by Time)", owner_1.scheduler.sort_by_time(is_completed=False))
-    _print_tasks("5. Filtered: Pochi Completed Only", owner_1.scheduler.sort_by_time(pet=dog_1, is_completed=True))
+    _print_tasks("2. All Tasks Sorted by Time",
+                 owner_1.scheduler.sort_by_time())
+    _print_tasks("3. Filtered: Tama Only (Sorted by Time)",
+                 owner_1.scheduler.sort_by_time(pet="Tama"))
+    _print_tasks("4. Filtered: Pending Only (Sorted by Time)",
+                 owner_1.scheduler.sort_by_time(is_completed=False))
+    _print_tasks("5. Filtered: Pochi Completed Only",
+                 owner_1.scheduler.sort_by_time(pet=dog_1, is_completed=True))
 
 
 if __name__ == "__main__":
     main()
-

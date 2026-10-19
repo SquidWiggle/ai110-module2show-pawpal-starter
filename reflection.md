@@ -130,3 +130,4 @@ Scheduler:
 
 - What is one important thing you learned about designing systems or working with AI on this project?
   - AI is good at pulling in advisor opinions when I have questions.
+  - Planing, review, and then executing gives better result than executing immediately.
