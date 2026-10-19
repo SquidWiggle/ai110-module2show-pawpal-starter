@@ -49,12 +49,13 @@ class TimeSlot:
         if not self.recurrence and not other.recurrence:
             return self.start_time < other.end_time and other.start_time < self.end_time
 
-        def _intervals(slot: "TimeSlot", d: date) -> list[tuple[datetime, datetime]]:
+        def _intervals(slot: "TimeSlot", d: date, ignore_inception: bool = False) -> list[tuple[datetime, datetime]]:
             dur = slot.end_time - slot.start_time
             st = datetime.combine(d, slot.start_time.time())
             res = [(st, st + dur)]
             if slot.start_time.time() > slot.end_time.time() and slot.recurrence == Recurrence.DAILY:
-                res.append((datetime.combine(d, dt_time.min), datetime.combine(d, slot.end_time.time())))
+                if ignore_inception or d > slot.start_time.date():
+                    res.append((datetime.combine(d, dt_time.min), datetime.combine(d, slot.end_time.time())))
             return res
 
         if self.recurrence and other.recurrence:
@@ -68,7 +69,7 @@ class TimeSlot:
             if not same_cycle:
                 return False
             ref = date(2000, 1, 2)
-            return any(s1 < e2 and s2 < e1 for s1, e1 in _intervals(self, ref) for s2, e2 in _intervals(other, ref))
+            return any(s1 < e2 and s2 < e1 for s1, e1 in _intervals(self, ref, ignore_inception=True) for s2, e2 in _intervals(other, ref, ignore_inception=True))
 
         rec, fix = (self, other) if self.recurrence else (other, self)
         if fix.end_time.date() < rec.start_time.date():
@@ -81,16 +82,14 @@ class TimeSlot:
                 or (rec.recurrence == Recurrence.MONTHLY and d.day == rec.start_time.day)
             )
 
-        dates = {fix.start_time.date(), fix.end_time.date()}
-        prev_d = fix.start_time.date() - timedelta(days=1)
-        if prev_d >= rec.start_time.date():
-            dates.add(prev_d)
-
-        for d in dates:
-            if _matches(d):
-                for s, e in _intervals(rec, d):
+        d_curr = fix.start_time.date() - timedelta(days=1)
+        d_end = fix.end_time.date()
+        while d_curr <= d_end:
+            if d_curr >= rec.start_time.date() and _matches(d_curr):
+                for s, e in _intervals(rec, d_curr):
                     if s < fix.end_time and fix.start_time < e:
                         return True
+            d_curr += timedelta(days=1)
         return False
 
 
@@ -329,6 +328,13 @@ class Owner:
         target_scheduler.schedule_task(task)
 
 
+def _ceil_15_mins(dt: datetime) -> datetime:
+    discard = timedelta(minutes=dt.minute % 15, seconds=dt.second, microseconds=dt.microsecond)
+    if discard.total_seconds() == 0:
+        return dt
+    return dt - discard + timedelta(minutes=15)
+
+
 @dataclass
 class Scheduler:
     owner: Owner | None = None
@@ -342,6 +348,15 @@ class Scheduler:
             if t not in resolved:
                 resolved.append(t)
         return resolved
+
+    def get_all_tasks(
+        self, upcoming_only: bool = False, owner: Owner | None = None
+    ) -> list[Task]:
+        tasks = self._resolve_tasks(owner)
+        if upcoming_only:
+            now = datetime.now()
+            tasks = [t for t in tasks if t.end_time >= now]
+        return tasks
 
     def schedule_task(self, task: Task) -> None:
         if task not in self.tasks:
@@ -359,11 +374,22 @@ class Scheduler:
         return next_task
 
     def organize_tasks(
-        self, tasks: list[Task] | None = None, owner: Owner | None = None
+        self,
+        tasks: list[Task] | None = None,
+        owner: Owner | None = None,
+        by_priority: bool = False,
     ) -> list[Task]:
         task_list = tasks if tasks is not None else self._resolve_tasks(owner)
         priority_weights = {Priority.HIGH: 0,
                             Priority.MEDIUM: 1, Priority.LOW: 2}
+        if by_priority:
+            return sorted(
+                task_list,
+                key=lambda t: (
+                    priority_weights.get(t.priority, 1),
+                    t.due_date,
+                ),
+            )
         return sorted(
             task_list,
             key=lambda t: (
@@ -371,6 +397,11 @@ class Scheduler:
                 priority_weights.get(t.priority, 1),
             ),
         )
+
+    def sort_by_priority(
+        self, tasks: list[Task] | None = None, owner: Owner | None = None
+    ) -> list[Task]:
+        return self.organize_tasks(tasks=tasks, owner=owner, by_priority=True)
 
     def sort_by_time(
         self,
@@ -427,13 +458,18 @@ class Scheduler:
                         conflicts.append((task, blocked))
         return conflicts
 
-    def get_conflict_warnings(self, owner: Owner | None = None) -> list[str]:
-        active_owner = owner or self.owner
-        tasks = [t for t in self._resolve_tasks(owner) if not t.is_completed]
+    def get_conflict_warnings(
+        self,
+        owner: Owner | None = None,
+        conflicts: list[tuple[Task, Task | TimeSlot]] | None = None,
+    ) -> list[str]:
+        if conflicts is None:
+            conflicts = self.alert_conflict(owner=owner)
         warnings: list[str] = []
 
-        for t1, t2 in combinations(tasks, 2):
-            if t1.time_slot.overlaps(t2.time_slot):
+        for item1, item2 in conflicts:
+            if isinstance(item2, Task):
+                t1, t2 = item1, item2
                 t1_pet = t1.pet.name if t1.pet else "Unassigned"
                 t2_pet = t2.pet.name if t2.pet else "Unassigned"
                 time_info = f"{t1.due_date.strftime('%H:%M')} - {t1.end_time.strftime('%H:%M')}"
@@ -448,17 +484,14 @@ class Scheduler:
                         f"{t1_pet} ('{t1.description}') and {t2_pet} ('{t2.description}') "
                         f"overlap around {time_info}."
                     )
-
-        if active_owner is not None:
-            for task in tasks:
-                for blocked in active_owner.blocked_times:
-                    if task.time_slot.overlaps(blocked):
-                        pet_name = task.pet.name if task.pet else "Task"
-                        block_desc = blocked.description or "Blocked Time"
-                        warnings.append(
-                            f"⚠️ [Blocked Time Collision] {pet_name} task '{task.description}' "
-                            f"collides with owner's {block_desc} schedule."
-                        )
+            elif isinstance(item2, TimeSlot):
+                task, blocked = item1, item2
+                pet_name = task.pet.name if task.pet else "Task"
+                block_desc = blocked.description or "Blocked Time"
+                warnings.append(
+                    f"⚠️ [Blocked Time Collision] {pet_name} task '{task.description}' "
+                    f"collides with owner's {block_desc} schedule."
+                )
 
         return warnings
 
@@ -467,13 +500,16 @@ class Scheduler:
         duration_minutes: int,
         available_times: list[TimeSlot] | None = None,
         owner: Owner | None = None,
+        search_start: datetime | None = None,
     ) -> TimeSlot | None:
         active_owner = owner or self.owner
+        default_computed = False
         slots = available_times or (
             active_owner.available_times if active_owner and active_owner.available_times else [])
         if not slots and active_owner and active_owner.blocked_times:
-            now = datetime.now()
-            day_start = datetime(now.year, now.month, now.day, 0, 0)
+            default_computed = True
+            ref_now = search_start or datetime.now()
+            day_start = datetime(ref_now.year, ref_now.month, ref_now.day, 0, 0)
             day_end = day_start + timedelta(days=1)
             slots = active_owner.get_available_times(day_start, day_end)
         if not slots:
@@ -483,8 +519,16 @@ class Scheduler:
         needed_duration = timedelta(minutes=duration_minutes)
         blocked_times = active_owner.blocked_times if active_owner else []
 
+        min_start = None
+        if search_start is not None:
+            min_start = _ceil_15_mins(search_start)
+        elif default_computed:
+            min_start = _ceil_15_mins(datetime.now())
+
         for slot in slots:
             candidate_start = slot.start_time
+            if min_start and candidate_start < min_start:
+                candidate_start = min_start
             while candidate_start + needed_duration <= slot.end_time:
                 candidate_slot = TimeSlot(
                     candidate_start, candidate_start + needed_duration)

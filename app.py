@@ -154,8 +154,8 @@ else:
 st.title("🐾 PawPal+ Pet Care Planner")
 
 # Conflict Analysis & Notifications (Elevated at Top)
-conflict_warnings = owner.scheduler.get_conflict_warnings()
 conflicts = owner.scheduler.alert_conflict()
+conflict_warnings = owner.scheduler.get_conflict_warnings(conflicts=conflicts)
 conflicting_task_ids = set()
 for c1, c2 in conflicts:
     conflicting_task_ids.add(id(c1))
@@ -204,7 +204,7 @@ with col_sort:
 if view_scope == "Target Date":
     base_tasks = owner.scheduler.see_todays_tasks(target_date=selected_date)
 else:
-    base_tasks = owner.scheduler._resolve_tasks()
+    base_tasks = owner.scheduler.get_all_tasks(upcoming_only=True)
 
 pet_filter = None if selected_pet_name == "All Pets" else selected_pet_name
 status_filter = None
@@ -221,7 +221,7 @@ filtered_time_tasks = owner.scheduler.sort_by_time(
 )
 
 if selected_sort == "Priority (High → Low)":
-    tasks = owner.scheduler.organize_tasks(tasks=filtered_time_tasks)
+    tasks = owner.scheduler.organize_tasks(tasks=filtered_time_tasks, by_priority=True)
 else:
     tasks = filtered_time_tasks
 
@@ -308,7 +308,10 @@ with finder_col2:
     find_button = st.button("Find Open Slot")
 
 if find_button:
-    open_slot = owner.scheduler.suggest_time_slot(duration_minutes=int(slot_duration))
+    open_slot = owner.scheduler.suggest_time_slot(
+        duration_minutes=int(slot_duration),
+        search_start=datetime.now(),
+    )
     if open_slot:
         start_fmt = open_slot.start_time.strftime("%Y-%m-%d %H:%M")
         end_fmt = open_slot.end_time.strftime("%H:%M")

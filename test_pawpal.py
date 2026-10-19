@@ -285,7 +285,7 @@ def test_timeslot_overlaps_overnight_daily():
         duration=30,
     )
     early_task = TimeSlot(
-        start_time=datetime(2026, 10, 19, 4, 0),
+        start_time=datetime(2026, 10, 20, 4, 0),
         duration=60,
     )
     day_task = TimeSlot(
@@ -690,6 +690,138 @@ def test_scheduler_complete_task_recurring_pet_none_and_auto_adds_pet():
     assert unregistered_pet in owner.pets
     assert next_fish_task in unregistered_pet.tasks
     assert next_fish_task in owner.get_all_tasks()
+
+
+def test_overnight_daily_inception_no_morning_conflict():
+    sleep_slot = TimeSlot(
+        start_time=datetime(2026, 10, 19, 22, 0),
+        duration=480,
+        recurrence=Recurrence.DAILY,
+    )
+    morning_slot = TimeSlot(
+        start_time=datetime(2026, 10, 19, 4, 0),
+        duration=60,
+    )
+    # Morning of inception date must not overlap
+    assert sleep_slot.overlaps(morning_slot) is False
+    assert morning_slot.overlaps(sleep_slot) is False
+
+    # Morning of following date must overlap
+    following_morning = TimeSlot(
+        start_time=datetime(2026, 10, 20, 4, 0),
+        duration=60,
+    )
+    assert sleep_slot.overlaps(following_morning) is True
+    assert following_morning.overlaps(sleep_slot) is True
+
+
+def test_suggest_time_slot_not_in_past_today():
+    today = datetime.now()
+    today_start = datetime(today.year, today.month, today.day, 0, 0)
+    owner = Owner(
+        name="Jordan",
+        blocked_times=[
+            TimeSlot(
+                start_time=today_start,
+                duration=480,  # 00:00 - 08:00
+                recurrence=Recurrence.DAILY,
+            ),
+            TimeSlot(
+                start_time=today_start.replace(hour=9),
+                duration=480,  # 09:00 - 17:00
+                recurrence=Recurrence.DAILY,
+            ),
+        ],
+    )
+    scheduler = Scheduler(owner=owner)
+
+    # Simulated 10:00 AM start ignores expired morning opening (08:00-09:00)
+    simulated_start = today_start.replace(hour=10, minute=0)
+    suggested = scheduler.suggest_time_slot(duration_minutes=30, search_start=simulated_start)
+    assert suggested is not None
+    assert suggested.start_time >= simulated_start
+    assert suggested.start_time == today_start.replace(hour=17, minute=0)
+
+    # Calling suggest_time_slot without search_start uses datetime.now() and never suggests past slots
+    suggested_now = scheduler.suggest_time_slot(duration_minutes=30)
+    if suggested_now is not None:
+        assert suggested_now.end_time > datetime.now()
+
+
+def test_scheduler_get_all_tasks_upcoming_only():
+    scheduler = Scheduler()
+    now = datetime.now()
+    past_task = Task(
+        description="Past Vet Visit",
+        due_date=now - timedelta(days=2),
+        duration=30,
+    )
+    upcoming_task = Task(
+        description="Future Grooming",
+        due_date=now + timedelta(days=2),
+        duration=45,
+    )
+    scheduler.schedule_task(past_task)
+    scheduler.schedule_task(upcoming_task)
+
+    all_tasks = scheduler.get_all_tasks(upcoming_only=False)
+    assert len(all_tasks) == 2
+    assert past_task in all_tasks
+    assert upcoming_task in all_tasks
+
+    upcoming_tasks = scheduler.get_all_tasks(upcoming_only=True)
+    assert len(upcoming_tasks) == 1
+    assert upcoming_tasks[0] == upcoming_task
+
+
+def test_multi_day_slot_spanning_recurring_day_overlap():
+    # Weekly recurring slot on Wednesday 14:00 - 15:00 (2026-10-14 is Wednesday)
+    weekly_slot = TimeSlot(
+        start_time=datetime(2026, 10, 14, 14, 0),
+        duration=60,
+        recurrence=Recurrence.WEEKLY,
+    )
+    # Multi-day non-recurring slot: Monday 2026-10-19 to Friday 2026-10-23
+    multi_day_slot = TimeSlot(
+        start_time=datetime(2026, 10, 19, 10, 0),
+        end_time=datetime(2026, 10, 23, 10, 0),
+    )
+    # Multi-day slot spanning the weekend only (2026-10-24 Saturday to 2026-10-25 Sunday)
+    weekend_slot = TimeSlot(
+        start_time=datetime(2026, 10, 24, 8, 0),
+        end_time=datetime(2026, 10, 25, 20, 0),
+    )
+
+    # Multi-day slot spans across Wednesday 2026-10-21
+    assert weekly_slot.overlaps(multi_day_slot) is True
+    assert multi_day_slot.overlaps(weekly_slot) is True
+
+    # Weekend slot does not span Wednesday
+    assert weekly_slot.overlaps(weekend_slot) is False
+    assert weekend_slot.overlaps(weekly_slot) is False
+
+
+def test_scheduler_sort_by_priority():
+    scheduler = Scheduler()
+    base = datetime(2026, 10, 19, 10, 0)
+    task_low = Task(
+        description="Low Early",
+        due_date=base,
+        priority=Priority.LOW,
+    )
+    task_high = Task(
+        description="High Late",
+        due_date=base + timedelta(hours=2),
+        priority=Priority.HIGH,
+    )
+    task_med = Task(
+        description="Med Mid",
+        due_date=base + timedelta(hours=1),
+        priority=Priority.MEDIUM,
+    )
+    sorted_tasks = scheduler.sort_by_priority([task_low, task_high, task_med])
+    assert sorted_tasks == [task_high, task_med, task_low]
+
 
 
 

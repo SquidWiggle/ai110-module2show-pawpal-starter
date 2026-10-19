@@ -44,23 +44,66 @@ pip install -r requirements.txt
 
 ## 🖥️ Sample Output
 
-An example usage of the CLI app is in main.py.
-1. Define pets Tama (cat) and Pochi (dog).
-2. Create tasks for Tama (cat) and Pochi (dog). Tama (cat) requires feedings. Pochi (dog) requires both feedings and walks.
-3. Create an Owner with default work & sleep time blocks blacked out so the scheduler understands the available times for pet tasks.
-4. Schedule their 3 tasks.
-5. Get all the scheduled task and print them out.
-Run main.py
+An example usage demonstrating sorting, filtering, and conflict detection is in `main.py`:
+
+1. Define pets Tama (cat) and Pochi (dog) with required care types.
+2. Configure Owner with recurring daily Work and Sleep blackout intervals.
+3. Schedule 7 tasks out of chronological order with intentional conflicts (same-pet clash, concurrent-care clash, and owner blackout clash).
+4. Demonstrate chronological sorting, pet filtering, and status filtering.
+5. Generate automated conflict detection warnings.
+
+Run `main.py`:
 ```bash
 python3 main.py
 ```
-```
-Scheduled Tasks:
-Time              Task            Pet        Duration   Priority
-------------------------------------------------------------
-2024-06-01 08:00  Feed Tama       Tama       15m        HIGH
-2024-06-01 08:30  Feed Pochi      Pochi      15m        HIGH
-2024-06-01 10:00  Walk Pochi      Pochi      30m        MEDIUM
+```text
+--- 1. Raw Unsorted Tasks (As Added) ---
+Time              Task            Pet      Status      Priority
+--------------------------------------------------------------
+2024-06-01 08:00  Feed Tama       Tama     Completed   HIGH
+2024-06-01 07:30  Tama Medicine   Tama     Pending     HIGH
+2024-06-01 19:00  Feed Tama (Clash) Tama   Pending     MEDIUM
+2024-06-01 19:00  Evening Walk    Pochi    Pending     MEDIUM
+2024-06-01 14:00  Play Pochi      Pochi    Completed   LOW
+2024-06-01 08:30  Feed Pochi      Pochi    Pending     HIGH
+2024-06-01 08:30  Morning Walk (Clash) Pochi Pending   HIGH
+
+--- 2. All Tasks Sorted by Time ---
+Time              Task            Pet      Status      Priority
+--------------------------------------------------------------
+2024-06-01 07:30  Tama Medicine   Tama     Pending     HIGH
+2024-06-01 08:00  Feed Tama       Tama     Completed   HIGH
+2024-06-01 08:30  Feed Pochi      Pochi    Pending     HIGH
+2024-06-01 08:30  Morning Walk (Clash) Pochi Pending   HIGH
+2024-06-01 14:00  Play Pochi      Pochi    Completed   LOW
+2024-06-01 19:00  Feed Tama (Clash) Tama   Pending     MEDIUM
+2024-06-01 19:00  Evening Walk    Pochi    Pending     MEDIUM
+
+--- 3. Filtered: Tama Only (Sorted by Time) ---
+Time              Task            Pet      Status      Priority
+--------------------------------------------------------------
+2024-06-01 07:30  Tama Medicine   Tama     Pending     HIGH
+2024-06-01 08:00  Feed Tama       Tama     Completed   HIGH
+2024-06-01 19:00  Feed Tama (Clash) Tama   Pending     MEDIUM
+
+--- 4. Filtered: Pending Only (Sorted by Time) ---
+Time              Task            Pet      Status      Priority
+--------------------------------------------------------------
+2024-06-01 07:30  Tama Medicine   Tama     Pending     HIGH
+2024-06-01 08:30  Feed Pochi      Pochi    Pending     HIGH
+2024-06-01 08:30  Morning Walk (Clash) Pochi Pending   HIGH
+2024-06-01 19:00  Feed Tama (Clash) Tama   Pending     MEDIUM
+2024-06-01 19:00  Evening Walk    Pochi    Pending     MEDIUM
+
+--- 5. Filtered: Pochi Completed Only ---
+Time              Task            Pet      Status      Priority
+--------------------------------------------------------------
+2024-06-01 14:00  Play Pochi      Pochi    Completed   LOW
+
+--- 6. Conflict Detection Warnings ---
+⚠️ [Concurrent Care Conflict] Overlapping pet tasks: Tama ('Feed Tama (Clash)') and Pochi ('Evening Walk') overlap around 19:00 - 19:15.
+⚠️ [Same-Pet Conflict] Pochi is double-booked: 'Feed Pochi' and 'Morning Walk (Clash)' overlap around 08:30 - 08:45.
+⚠️ [Blocked Time Collision] Tama task 'Tama Medicine' collides with owner's Sleep schedule.
 ```
 
 ## 🧪 Testing PawPal+
@@ -79,11 +122,11 @@ Sample test output:
 ============================= test session starts ==============================
 platform darwin -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
 rootdir: /Users/sameen/CodePath/ai110-module2show-pawpal-starter
-collecting ... collected 24 items
+collecting ... collected 34 items
 
-test_pawpal.py ........................                                  [100%]
+test_pawpal.py ..................................                        [100%]
 
-============================== 24 passed in 0.06s ==============================
+============================== 34 passed in 0.04s ==============================
 ```
 
 ## 📐 Smarter Scheduling
@@ -92,34 +135,38 @@ The scheduling engine combines multi-pet aggregation, constraint-aware slot find
 
 ### Feature Overview
 
-| Feature | Method(s) | Summary |
+| Feature | Method(s) | Notes |
 |---|---|---|
-| **Sorting behavior** | `Scheduler.sort_by_time()`, `Scheduler.organize_tasks()` | Chronological ordering by `due_date`/time with secondary sorting by priority (`HIGH: 0`, `MEDIUM: 1`, `LOW: 2`). |
-| **Filtering behavior** | `Scheduler.sort_by_time()`, `Scheduler.see_todays_tasks()`, `Owner.get_all_tasks()` | Filters by pet, completion status, or date; aggregates tasks across all owned pets. |
-| **Conflict detection logic** | `TimeSlot.overlaps()`, `Scheduler.alert_conflict()`, `Scheduler.get_conflict_warnings()`, `Scheduler.suggest_time_slot()` | Pairwise interval overlap checks with `itertools.combinations`; distinguishes same-pet, concurrent-care, and owner-blocked collisions. |
-| **Recurring task logic** | `Task.mark_complete()`, `Scheduler.complete_task()`, `TimeSlot.overlaps()`, `Owner.get_available_times()` | Spawns successor occurrences on task completion (+1 day, +7 days, +30 days); projects recurring blackout windows across date ranges. |
+| **Sorting by Time & Priority** | `Scheduler.sort_by_time()`, `Scheduler.organize_tasks()` | Primary sort by `due_date`; secondary tie-break by priority weight (`HIGH: 0`, `MEDIUM: 1`, `LOW: 2`). |
+| **Conflict Warnings** | `Scheduler.get_conflict_warnings()`, `Scheduler.alert_conflict()`, `TimeSlot.overlaps()` | Pairwise $O(N^2)$ interval overlap check (`start1 < end2` and `start2 < end1`) detecting same-pet, concurrent-pet, and owner blackout collisions. |
+| **Daily & Periodic Recurrence** | `Task.mark_complete()`, `Scheduler.complete_task()`, `Owner.get_available_times()` | Automatically creates the next due task (+1 day, +7 days, +30 days) whenever a recurring task is completed, and applies recurring owner busy hours. |
+| **Smart Slot Suggestion** | `Scheduler.suggest_time_slot()` | First-fit interval search stepping by 15-minute increments against existing tasks and recurring owner blocked times. |
+| **Multi-Pet Task Filtering** | `Scheduler.see_todays_tasks()`, `Owner.get_all_tasks()` | Aggregates all pet tasks under an owner and filters by calendar date, pet identity, or completion status. |
 
 ### Feature Documentation
 
-1. **Sorting Behavior**
-   - `Scheduler.sort_by_time(tasks=None, owner=None, pet=None, is_completed=None)`: Chronologically sorts tasks by `Task.time` (supporting both `datetime` objects and `"HH:MM"` time strings).
-   - `Scheduler.organize_tasks(tasks=None, owner=None)`: Sorts tasks primarily by chronological `due_date`, then secondarily by priority weight (`HIGH: 0`, `MEDIUM: 1`, `LOW: 2`).
+1. **Sorting by Time & Priority**
+   - **What it does**: Orders tasks chronologically while prioritizing urgent pet care (e.g. high-priority medication before low-priority grooming).
+   - **How it works**: Uses a composite sort key `(task.due_date, priority_weight)`. `Scheduler.sort_by_time` handles standard chronological views; `Scheduler.organize_tasks` applies the secondary priority tie-breaker.
 
-2. **Filtering Behavior**
-   - `Scheduler.sort_by_time()`: Filters tasks dynamically by `pet` (accepts `Pet` instance or string name) and by `is_completed` / `completion_status` boolean flag.
-   - `Scheduler.see_todays_tasks(owner=None, target_date=None)`: Filters tasks matching a specific calendar date (defaults to today's date).
-   - `Owner.get_all_tasks()`: Aggregates tasks across all pets registered to an owner.
+2. **Conflict Warnings**
+   - **What it does**: Flags scheduling collisions before they happen and labels the collision type with human-readable alerts.
+   - **How it works**: Checks all pairs of active tasks and owner busy times for overlapping hours (`start1 < end2 and start2 < end1`). Categorizes into 3 warning types:
+     - `Same-Pet Conflict`: Same pet double-booked for two activities at once.
+     - `Concurrent Care Conflict`: Two different pets requiring simultaneous attention from one owner.
+     - `Blocked Time Collision`: Pet task scheduled during owner sleep, work, or blackout hours.
 
-3. **Conflict Detection Logic**
-   - `TimeSlot.overlaps(other)`: Evaluates interval intersection ($s_1 < e_2 \text{ and } s_2 < e_1$), including daily recurrence time-of-day projection.
-   - `Scheduler.alert_conflict(available_times=None, owner=None)`: Uses `itertools.combinations` to perform pairwise collision checks across all pending tasks and against owner `blocked_times`, returning `(task, conflict)` tuples.
-   - `Scheduler.get_conflict_warnings(owner=None)` / `Scheduler.check_conflicts()`: Generates descriptive advisory warnings distinguishing same-pet double-booking, cross-pet concurrent duties, and owner blocked time collisions.
-   - `Scheduler.suggest_time_slot(duration_minutes, available_times=None, owner=None)`: Scans available intervals to find the earliest non-colliding time slot.
+3. **Daily Recurrence**
+   - **What it does**: Automatically schedules the next occurrence when recurring care (like daily feeding) is completed, and enforces recurring owner blackout schedules.
+   - **How it works**: On `task.mark_complete()`, calculates the next due date based on the recurrence rule (`DAILY` $\rightarrow$ +1 day, `WEEKLY` $\rightarrow$ +7 days, `MONTHLY` $\rightarrow$ +30 days), instantiates a fresh uncompleted task, and links it back to the pet and scheduler.
 
-4. **Recurring Task Logic**
-   - `Task.mark_complete()` / `Task.execute()`: Auto-spawns the successor `Task` upon completion based on recurrence delta (`DAILY`: +1 day, `WEEKLY`: +7 days, `MONTHLY`: +30 days) and registers it to the pet.
-   - `Scheduler.complete_task(task)`: Invokes `task.mark_complete()` and registers the generated successor task into `Scheduler.tasks`.
-   - `Owner.get_available_times(start, end)`: Dynamically projects recurring blocked times (`DAILY`, `WEEKLY`, `MONTHLY`) across a requested query interval and slices free time intervals.
+4. **Smart Slot Suggestion**
+   - **What it does**: Automatically finds the next available open time window for a task of a given duration.
+   - **How it works**: Performs a first-fit linear scan through owner free intervals, testing prospective windows in 15-minute increments. Skips past any interval that overlaps an active task or projected recurring blackout block until a collision-free window is found.
+
+5. **Multi-Pet Task Filtering**
+   - **What it does**: Lets owners isolate tasks by day, pet, or completion status across their entire household.
+   - **How it works**: Deduplicates tasks across registered pets and scheduler queues, applying date matching (`task.due_date.date() == check_date`) and optional pet name / completion status filters.
 
 
 
