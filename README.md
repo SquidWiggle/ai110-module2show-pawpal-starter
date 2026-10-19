@@ -172,12 +172,26 @@ The scheduling engine combines multi-pet aggregation, constraint-aware slot find
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+1. **Set Your Routine & Add Pets (Sidebar)**
+   - Review your built-in busy hours (Sleep `00:00 - 08:00` and Work `09:00 - 17:00`), or add new blackout blocks.
+   - Open **Add New Pet** to register your pets (e.g., name: "Mochi", species: "Dog", breed: "Shiba Inu").
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+2. **Schedule Pet Care Tasks (Sidebar)**
+   - Choose a pet and pick a care type (`FEEDINGS`, `WALKS`, `MEDICATIONS`, etc.).
+   - Set start time, duration in minutes, priority (`HIGH`, `MEDIUM`, `LOW`), and recurrence (`DAILY`, `WEEKLY`, or `MONTHLY`).
+   - Click **Schedule Task** to add it to the planner.
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+3. **Check Real-Time Conflict Alerts**
+   - The scheduler checks for schedule clashes and displays warnings:
+     - **Same-Pet Conflict**: One pet is double-booked for two activities at once.
+     - **Concurrent Care Conflict**: Two different pets need you at the exact same time.
+     - **Blocked Time Collision**: A task falls during your sleep or work hours.
+
+4. **View and Sort Your Daily Schedule**
+   - Switch between **Target Date** (view today's tasks) and **All Upcoming**.
+   - Filter by a specific pet or completion status (Pending vs. Completed).
+   - Sort by **Time (Chronological)** to see what comes next, or by **Priority (High → Low)** to handle urgent care first.
+
+5. **Complete Tasks & Find Open Slots (Cards & Slot Finder)**
+   - Click **Mark Complete** on any task. If marked daily, the scheduler automatically schedules the next occurrence for tomorrow.
+   - Need to fit in a last-minute activity? Enter duration in the **Open Time Slot Finder** at the bottom to get the earliest conflict-free opening.
