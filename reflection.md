@@ -72,7 +72,10 @@ Scheduler:
 **a. Constraints and priorities**
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
+  - The owner blockes out their work or sleep time so the pet tasks cannot conflict with them. 
+  - Play time has less priority than medication or feeding.
 - How did you decide which constraints mattered most?
+  - I defined it using my own understanding of pet care and common sense.
 
 **b. Tradeoffs**
 
