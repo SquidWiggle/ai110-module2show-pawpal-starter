@@ -16,31 +16,29 @@ Owner:
   - attributes:
     - name: str
     - pets: []Pet
-    - available_time: {}
+    - available_time: TimeSlot
   - methods:
     - schedule_task(task_type)
     - add_pet
     - feed_pet
     - play_with_pet
-    - see_todays_task
 
 Pet:
   - attributes:
     - name
-    - specie
+    - species
     - breed
     - required_care: [food, walk, play_time, grooming]
-  - methods:
-    - play
-    - eat
+
 
 Task:
   - attributes:
-    - priority (high, medium, low)
-    - type: feedings, walks, medications, vet appointment, play, grooming
-    - pet_name
-    - duration: min, hour
-    - recurrence (daily, weekly, monthly)
+    - due_date: datetime
+    - priority: Enum (high, medium, low)
+    - type: Enum (feedings, walks, medications, vet appointment, play, grooming)
+    - pet: Pet
+    - duration: int (minutes)
+    - recurrence: Enum (daily, weekly, monthly)
   - methods:
     - execute
 
@@ -49,12 +47,13 @@ Scheduler:
     - tasks: Task[]
   - methods:
     - schedule a task
+    - see_todays_task
     - alert about a conflict
     - suggest time slot
 
 
 - What classes did you include, and what responsibilities did you assign to each?
-  - Owner: The user of the app who can have a existing schedule. The owner is responsible for scheduling tasks to take care of their pets.
+  - Owner: The user of the app who can have a existing schedule. The owner is responsible for scheduling tasks to take care of their pets. An owner can have multiple pets.
   - Pet: A pet that can be adopted by the owner. It is responsible for nothing much other than eat and play. A pet come with the care it needs. A pet can need only food, walk, or grooming, or it can need medication, play_time, frequent vet_appointments.
   - Task: Task object holds information about the task - which pet the task applies to, duration of the task, priority of the task.
   - Scheduler: A scheduler keeps track of the tasks an owner has scheduled on their calendar.
