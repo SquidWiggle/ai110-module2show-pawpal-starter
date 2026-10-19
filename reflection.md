@@ -61,8 +61,10 @@ Scheduler:
 **b. Design changes**
 
 - Did your design change during implementation?
+  - Yes.
 - If yes, describe at least one change and why you made it.
-
+  - I've initially put see_todays_task() and schedule_task() under Owner class, and used a map as the type of Owner's available time slot. I've also put eat() as Pet's method. AI suggested to single out Owner and Scheduler's responsibilities, add datetime type for Scheduler to check time conflict later, and remove eat() since it is a duplicate of Owner's feed() method. I agreed.
+  - I checked if using the same TaskType Enum in Pet's required_care list made sense, and AI answered it eliminates string mismatching, enables type checking, and most importantly restricts pet care requirements to defined single source of truth, so it is a good move.
 ---
 
 ## 2. Scheduling Logic and Tradeoffs

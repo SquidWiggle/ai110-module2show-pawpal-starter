@@ -1,11 +1,16 @@
 classDiagram
     direction LR
 
+    class TimeSlot {
+        +DateTime start_time
+        +DateTime end_time
+    }
+
     class Owner {
         +String name
         +List~Pet~ pets
-        +TimeSlot available_time
-        +schedule_task(task_type)
+        +List~TimeSlot~ available_times
+        +schedule_task(scheduler: Scheduler, task: Task)
         +add_pet(pet: Pet)
         +feed_pet(pet: Pet)
         +play_with_pet(pet: Pet)
@@ -25,6 +30,7 @@ classDiagram
         +Pet pet
         +int duration
         +Recurrence recurrence
+        +bool is_completed
         +execute()
     }
 
@@ -32,8 +38,8 @@ classDiagram
         +List~Task~ tasks
         +schedule_task(task: Task)
         +see_todays_tasks() List~Task~
-        +alert_conflict()
-        +suggest_time_slot() TimeSlot
+        +alert_conflict(available_times: List~TimeSlot~)
+        +suggest_time_slot(duration_minutes: int, available_times: List~TimeSlot~) TimeSlot
     }
 
     class Priority {
@@ -61,11 +67,12 @@ classDiagram
     }
 
     Owner "1" o-- "0..*" Pet : owns
+    Owner "1" o-- "0..*" TimeSlot : has
     Owner ..> Scheduler : uses
     Scheduler "1" o-- "0..*" Task : manages
+    Scheduler ..> TimeSlot : evaluates
     Task "0..*" --> "1" Pet : targets
     Task ..> Priority
     Task ..> TaskType
     Task ..> Recurrence
     Pet ..> TaskType
-```

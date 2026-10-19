@@ -46,18 +46,19 @@ class Task:
     pet: Pet
     duration: int
     recurrence: Recurrence | None = None
+    is_completed: bool = False
 
     def execute(self) -> None:
-        pass
+        self.is_completed = True
 
 
 @dataclass
 class Owner:
     name: str
     pets: list[Pet] = field(default_factory=list)
-    available_time: TimeSlot | None = None
+    available_times: list[TimeSlot] = field(default_factory=list)
 
-    def schedule_task(self, task_type: TaskType) -> None:
+    def schedule_task(self, scheduler: "Scheduler", task: Task) -> None:
         pass
 
     def add_pet(self, pet: Pet) -> None:
@@ -80,9 +81,11 @@ class Scheduler:
     def see_todays_tasks(self) -> list[Task]:
         pass
 
-    def alert_conflict(self) -> None:
+    def alert_conflict(self, available_times: list[TimeSlot] | None = None) -> None:
         pass
 
-    def suggest_time_slot(self) -> TimeSlot | None:
+    def suggest_time_slot(
+        self, duration_minutes: int, available_times: list[TimeSlot]
+    ) -> TimeSlot | None:
         pass
 
