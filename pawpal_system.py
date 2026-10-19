@@ -61,7 +61,7 @@ class Task:
 
     def __init__(
         self,
-        arg1: str | datetime | None = None,
+        description: str = "",
         due_date: datetime | None = None,
         priority: Priority | str = Priority.MEDIUM,
         type: TaskType | str = TaskType.WALKS,
@@ -69,21 +69,12 @@ class Task:
         duration: int = 30,
         recurrence: Recurrence | str | None = None,
         is_completed: bool = False,
-        description: str = "",
         time: datetime | None = None,
         frequency: Recurrence | str | None = None,
         completion_status: bool | None = None,
     ):
-        # Support positional datetime from earlier stub
-        if isinstance(arg1, datetime):
-            self.due_date = arg1
-            self.description = description
-        elif isinstance(arg1, str):
-            self.description = arg1
-            self.due_date = due_date or time or datetime.now()
-        else:
-            self.description = description
-            self.due_date = due_date or time or datetime.now()
+        self.description = description
+        self.due_date = due_date or time or datetime.now()
 
         if isinstance(priority, str):
             self.priority = Priority(priority.upper())
