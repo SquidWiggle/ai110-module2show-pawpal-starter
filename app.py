@@ -1,88 +1,249 @@
 import streamlit as st
-
-st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
-
-st.title("🐾 PawPal+")
-
-st.markdown(
-    """
-Welcome to the PawPal+ starter app.
-
-This file is intentionally thin. It gives you a working Streamlit app so you can start quickly,
-but **it does not implement the project logic**. Your job is to design the system and build it.
-
-Use this app as your interactive demo once your backend classes/functions exist.
-"""
+from datetime import datetime, date, time, timedelta
+from pawpal_system import (
+    Owner,
+    Pet,
+    Task,
+    TaskType,
+    Priority,
+    Recurrence,
+    TimeSlot,
 )
 
-with st.expander("Scenario", expanded=True):
-    st.markdown(
-        """
-**PawPal+** is a pet care planning assistant. It helps a pet owner plan care tasks
-for their pet(s) based on constraints like time, priority, and preferences.
+st.set_page_config(page_title="PawPal+ Care Planner", page_icon="🐾", layout="wide")
 
-You will design and implement the scheduling logic and connect it to this Streamlit UI.
-"""
+# Session Vault Initialization
+if "owner" not in st.session_state:
+    owner = Owner(name="Jordan")
+    today_base = date.today()
+    sleep_start = datetime.combine(today_base, time(0, 0))
+    owner.block_time(
+        start_time=sleep_start,
+        duration=480,
+        recurrence=Recurrence.DAILY,
+        description="Sleep",
     )
-
-with st.expander("What you need to build", expanded=True):
-    st.markdown(
-        """
-At minimum, your system should:
-- Represent pet care tasks (what needs to happen, how long it takes, priority)
-- Represent the pet and the owner (basic info and preferences)
-- Build a plan/schedule for a day that chooses and orders tasks based on constraints
-- Explain the plan (why each task was chosen and when it happens)
-"""
+    work_start = datetime.combine(today_base, time(9, 0))
+    owner.block_time(
+        start_time=work_start,
+        duration=480,
+        recurrence=Recurrence.DAILY,
+        description="Work",
     )
+    owner.add_pet(Pet(name="Mochi", species="Dog", breed="Shiba Inu"))
+    st.session_state["owner"] = owner
 
-st.divider()
+owner: Owner = st.session_state["owner"]
 
-st.subheader("Quick Demo Inputs (UI only)")
-owner_name = st.text_input("Owner name", value="Jordan")
-pet_name = st.text_input("Pet name", value="Mochi")
-species = st.selectbox("Species", ["dog", "cat", "other"])
+# ----------------- SIDEBAR -----------------
+st.sidebar.title("🐾 PawPal+ Controls")
 
-st.markdown("### Tasks")
-st.caption("Add a few tasks. In your final version, these should feed into your scheduler.")
+# Owner Profile & Blocked Times
+st.sidebar.header("Owner Profile & Blocked Times")
+st.sidebar.markdown(f"**Owner:** {owner.name}")
 
-if "tasks" not in st.session_state:
-    st.session_state.tasks = []
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    task_title = st.text_input("Task title", value="Morning walk")
-with col2:
-    duration = st.number_input("Duration (minutes)", min_value=1, max_value=240, value=20)
-with col3:
-    priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
-
-if st.button("Add task"):
-    st.session_state.tasks.append(
-        {"title": task_title, "duration_minutes": int(duration), "priority": priority}
-    )
-
-if st.session_state.tasks:
-    st.write("Current tasks:")
-    st.table(st.session_state.tasks)
+st.sidebar.markdown("**Blocked Times:**")
+if owner.blocked_times:
+    for b in owner.blocked_times:
+        rec_label = f" ({b.recurrence.value})" if b.recurrence else ""
+        end_str = b.end_time.strftime("%H:%M") if b.end_time else "N/A"
+        time_str = f"{b.start_time.strftime('%H:%M')} - {end_str}"
+        st.sidebar.markdown(f"- **{b.description or 'Blocked'}**: `{time_str}`{rec_label}")
 else:
-    st.info("No tasks yet. Add one above.")
+    st.sidebar.caption("No blocked times configured.")
+
+with st.sidebar.expander("Add Blocked Time", expanded=False):
+    with st.form("block_time_form"):
+        block_desc = st.text_input("Description", value="Break")
+        block_date = st.date_input("Start Date", value=date.today(), key="block_date_input")
+        block_time = st.time_input("Start Time", value=time(12, 0), key="block_time_input")
+        block_dur = st.number_input("Duration (minutes)", min_value=5, max_value=1440, value=60, step=5)
+        block_rec = st.selectbox("Recurrence", ["None", "DAILY", "WEEKLY", "MONTHLY"], key="block_rec_select")
+        block_submitted = st.form_submit_button("Add Blocked Time")
+        if block_submitted:
+            rec_enum = Recurrence(block_rec) if block_rec != "None" else None
+            start_dt = datetime.combine(block_date, block_time)
+            owner.block_time(
+                start_time=start_dt,
+                duration=int(block_dur),
+                recurrence=rec_enum,
+                description=block_desc,
+            )
+            st.success("Blocked time added!")
+            st.rerun()
+
+# Manage Pets
+st.sidebar.header("Manage Pets")
+st.sidebar.markdown("**Registered Pets:**")
+if owner.pets:
+    for p in owner.pets:
+        st.sidebar.markdown(f"- 🐶 **{p.name}** ({p.species} • {p.breed})")
+else:
+    st.sidebar.caption("No pets registered.")
+
+with st.sidebar.expander("Add New Pet", expanded=False):
+    with st.form("add_pet_form"):
+        new_pet_name = st.text_input("Pet Name")
+        new_pet_species = st.selectbox("Species", ["Dog", "Cat", "Bird", "Other"])
+        new_pet_breed = st.text_input("Breed", value="Mixed")
+        add_pet_submitted = st.form_submit_button("Add Pet")
+        if add_pet_submitted:
+            if new_pet_name.strip():
+                owner.add_pet(
+                    Pet(
+                        name=new_pet_name.strip(),
+                        species=new_pet_species,
+                        breed=new_pet_breed.strip(),
+                    )
+                )
+                st.success(f"Added pet {new_pet_name.strip()}!")
+                st.rerun()
+            else:
+                st.error("Pet name cannot be empty.")
+
+# Schedule Task Form
+st.sidebar.header("Schedule Task")
+if not owner.pets:
+    st.sidebar.warning("Please add at least one pet before scheduling tasks.")
+else:
+    pet_dict = {f"{p.name} ({p.species})": p for p in owner.pets}
+    selected_pet_label = st.sidebar.selectbox("Select Pet", list(pet_dict.keys()))
+    selected_pet = pet_dict.get(selected_pet_label, owner.pets[0])
+
+    task_desc = st.sidebar.text_input("Task Description", value="Morning Walk")
+    task_type = st.sidebar.selectbox("Task Type", list(TaskType), format_func=lambda t: t.value)
+    task_priority = st.sidebar.selectbox(
+        "Priority",
+        [Priority.HIGH, Priority.MEDIUM, Priority.LOW],
+        format_func=lambda p: p.value,
+        index=0,
+    )
+    task_date = st.sidebar.date_input("Due Date", value=date.today(), key="task_date_picker")
+    task_time = st.sidebar.time_input("Due Time", value=time(8, 30), key="task_time_picker")
+    task_duration = st.sidebar.number_input(
+        "Duration (minutes)",
+        min_value=5,
+        max_value=240,
+        value=30,
+        step=5,
+        key="task_duration_picker",
+    )
+    task_rec_choice = st.sidebar.selectbox(
+        "Recurrence",
+        ["None", "DAILY", "WEEKLY", "MONTHLY"],
+        key="task_rec_picker",
+    )
+
+    if st.sidebar.button("Schedule Task"):
+        due_datetime = datetime.combine(task_date, task_time)
+        task_rec = Recurrence(task_rec_choice) if task_rec_choice != "None" else None
+        task = Task(
+            description=task_desc.strip() or task_type.value,
+            due_date=due_datetime,
+            priority=task_priority,
+            type=task_type,
+            pet=selected_pet,
+            duration=int(task_duration),
+            recurrence=task_rec,
+        )
+        owner.schedule_task(task)
+        st.sidebar.success(f"Scheduled task: {task.description}!")
+        st.rerun()
+
+# ----------------- MAIN PANEL -----------------
+st.title("🐾 PawPal+ Pet Care Planner")
+
+# Daily Schedule view
+st.header("📅 Daily Schedule")
+selected_date = st.date_input("Target Date", value=date.today(), key="target_date_picker")
+
+tasks = owner.scheduler.see_todays_tasks(target_date=selected_date)
+
+if not tasks:
+    st.info(f"No tasks scheduled for {selected_date.strftime('%B %d, %Y')}.")
+else:
+    for idx, t in enumerate(tasks):
+        due_str = t.due_date.strftime("%H:%M")
+        end_str = t.end_time.strftime("%H:%M")
+        pet_name = t.pet.name if t.pet else "Unassigned"
+        rec_badge = f" • 🔁 {t.recurrence.value}" if t.recurrence else ""
+
+        with st.container(border=True):
+            col_time, col_details, col_status, col_action = st.columns([2, 4, 2, 2])
+            with col_time:
+                st.markdown(f"**⏰ {due_str} - {end_str}**")
+                st.caption(f"🐾 **{pet_name}**{rec_badge}")
+            with col_details:
+                st.markdown(f"**{t.description}**")
+                st.caption(
+                    f"Type: `{t.type.value}` | Priority: `{t.priority.value}` | Duration: {t.duration} mins"
+                )
+            with col_status:
+                if t.is_completed:
+                    st.success("✅ Completed")
+                else:
+                    st.warning("⏳ Pending")
+            with col_action:
+                if not t.is_completed:
+                    if st.button("Mark Complete", key=f"complete_{idx}_{t.due_date.timestamp()}"):
+                        t.mark_complete()
+                        st.rerun()
 
 st.divider()
 
-st.subheader("Build Schedule")
-st.caption("This button should call your scheduling logic once you implement it.")
+# Conflict Analysis Section
+st.header("⚠️ Conflict Analysis")
+conflicts = owner.scheduler.alert_conflict()
+if conflicts:
+    st.warning(f"Found {len(conflicts)} schedule conflict(s):")
+    for idx, (t1, other) in enumerate(conflicts):
+        t1_pet = f" ({t1.pet.name})" if t1.pet else ""
+        t1_due = t1.due_date.strftime("%H:%M")
+        t1_end = t1.end_time.strftime("%H:%M")
+        t1_label = f"Task **'{t1.description}'**{t1_pet} [{t1_due} - {t1_end}]"
 
-if st.button("Generate schedule"):
-    st.warning(
-        "Not implemented yet. Next step: create your scheduling logic (classes/functions) and call it here."
+        if isinstance(other, Task):
+            other_pet = f" ({other.pet.name})" if other.pet else ""
+            other_due = other.due_date.strftime("%H:%M")
+            other_end = other.end_time.strftime("%H:%M")
+            other_label = f"Task **'{other.description}'**{other_pet} [{other_due} - {other_end}]"
+        elif isinstance(other, TimeSlot):
+            rec_text = f" ({other.recurrence.value})" if other.recurrence else ""
+            o_start = other.start_time.strftime("%H:%M")
+            o_end = other.end_time.strftime("%H:%M") if other.end_time else "N/A"
+            other_label = f"Blocked Time **'{other.description or 'Blocked'}'** [{o_start} - {o_end}{rec_text}]"
+        else:
+            other_label = str(other)
+
+        st.error(f"**Conflict {idx + 1}:** {t1_label} collides with {other_label}")
+else:
+    st.success("No schedule collisions detected.")
+
+st.divider()
+
+# Open Time Slot Finder
+st.header("🔍 Open Time Slot Finder")
+st.markdown("Find an available opening in the owner's schedule that does not overlap with tasks or blocked times.")
+finder_col1, finder_col2 = st.columns([2, 1])
+with finder_col1:
+    slot_duration = st.number_input(
+        "Required duration (minutes)",
+        min_value=5,
+        max_value=240,
+        value=30,
+        step=5,
+        key="open_slot_duration_input",
     )
-    st.markdown(
-        """
-Suggested approach:
-1. Design your UML (draft).
-2. Create class stubs (no logic).
-3. Implement scheduling behavior.
-4. Connect your scheduler here and display results.
-"""
-    )
+with finder_col2:
+    st.write("")
+    st.write("")
+    find_button = st.button("Find Open Slot")
+
+if find_button:
+    open_slot = owner.scheduler.suggest_time_slot(duration_minutes=int(slot_duration))
+    if open_slot:
+        start_fmt = open_slot.start_time.strftime("%Y-%m-%d %H:%M")
+        end_fmt = open_slot.end_time.strftime("%H:%M")
+        st.success(f"✅ Available slot found: **{start_fmt} - {end_fmt}** ({open_slot.duration} minutes)")
+    else:
+        st.warning("No available time slot found for the requested duration.")
