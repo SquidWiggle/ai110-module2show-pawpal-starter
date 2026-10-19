@@ -361,3 +361,90 @@ def test_scheduler_sort_by_time_string_format():
     assert sorted_tasks == [t2, t3, t1]
 
 
+def test_recurring_task_daily_completion_creates_next_instance():
+    dog = Pet(name="Mochi", species="Dog", breed="Shiba")
+    start = datetime(2026, 10, 19, 8, 30)
+    task = Task(
+        description="Daily Morning Walk",
+        due_date=start,
+        priority=Priority.HIGH,
+        type=TaskType.WALKS,
+        pet=dog,
+        duration=30,
+        recurrence=Recurrence.DAILY,
+    )
+    dog.add_task(task)
+    assert len(dog.tasks) == 1
+
+    next_task = task.mark_complete()
+    assert task.is_completed is True
+    assert next_task is not None
+    assert next_task.due_date == start + timedelta(days=1)
+    assert next_task.due_date.time() == start.time()
+    assert next_task.is_completed is False
+    assert next_task.recurrence == Recurrence.DAILY
+    assert next_task.description == "Daily Morning Walk"
+    assert next_task.pet is dog
+    # Auto-registered to pet
+    assert len(dog.tasks) == 2
+    assert dog.tasks[-1] is next_task
+
+    # Idempotent call does not spawn another occurrence
+    duplicate = task.mark_complete()
+    assert duplicate is None
+    assert len(dog.tasks) == 2
+
+
+def test_recurring_task_weekly_completion_creates_next_instance():
+    cat = Pet(name="Luna", species="Cat", breed="Siamese")
+    start = datetime(2026, 10, 19, 15, 0)
+    task = Task(
+        description="Weekly Grooming",
+        due_date=start,
+        priority=Priority.MEDIUM,
+        type=TaskType.GROOMING,
+        pet=cat,
+        duration=45,
+        recurrence=Recurrence.WEEKLY,
+    )
+    cat.add_task(task)
+
+    next_task = task.mark_complete()
+    assert task.is_completed is True
+    assert next_task is not None
+    assert next_task.due_date == start + timedelta(weeks=1)
+    assert next_task.is_completed is False
+    assert len(cat.tasks) == 2
+
+
+def test_non_recurring_task_completion_creates_no_instance():
+    task = Task(
+        description="Vet Checkup",
+        due_date=datetime(2026, 10, 19, 11, 0),
+        recurrence=None,
+    )
+    next_task = task.mark_complete()
+    assert task.is_completed is True
+    assert next_task is None
+
+
+def test_scheduler_complete_task_registers_next_instance():
+    scheduler = Scheduler()
+    start = datetime(2026, 10, 19, 9, 0)
+    task = Task(
+        description="Unassigned Daily Task",
+        due_date=start,
+        recurrence=Recurrence.DAILY,
+    )
+    scheduler.schedule_task(task)
+    assert len(scheduler.tasks) == 1
+
+    next_task = scheduler.complete_task(task)
+    assert task.is_completed is True
+    assert next_task is not None
+    assert next_task.due_date == start + timedelta(days=1)
+    assert len(scheduler.tasks) == 2
+    assert scheduler.tasks[-1] is next_task
+
+
+

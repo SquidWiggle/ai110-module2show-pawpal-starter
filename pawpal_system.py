@@ -165,13 +165,43 @@ class Task:
 
     @property
     def time_slot(self) -> TimeSlot:
-        return TimeSlot(start_time=self.due_date, end_time=self.end_time)
+        return TimeSlot(
+            start_time=self.due_date,
+            end_time=self.end_time,
+            recurrence=self.recurrence,
+        )
 
-    def execute(self) -> None:
+    def execute(self) -> "Task | None":
+        return self.mark_complete()
+
+    def mark_complete(self) -> "Task | None":
+        if self.is_completed:
+            return None
         self.is_completed = True
 
-    def mark_complete(self) -> None:
-        self.is_completed = True
+        delta: timedelta | None = None
+        if self.recurrence == Recurrence.DAILY:
+            delta = timedelta(days=1)
+        elif self.recurrence == Recurrence.WEEKLY:
+            delta = timedelta(weeks=1)
+        elif self.recurrence == Recurrence.MONTHLY:
+            delta = timedelta(days=30)
+
+        if delta is not None:
+            next_task = Task(
+                description=self.description,
+                due_date=self.due_date + delta,
+                priority=self.priority,
+                type=self.type,
+                pet=self.pet,
+                duration=self.duration,
+                recurrence=self.recurrence,
+                is_completed=False,
+            )
+            if self.pet:
+                self.pet.add_task(next_task)
+            return next_task
+        return None
 
 
 @dataclass
@@ -327,6 +357,12 @@ class Scheduler:
             self.tasks.append(task)
         if task.pet and task not in task.pet.tasks:
             task.pet.add_task(task)
+
+    def complete_task(self, task: Task) -> Task | None:
+        next_task = task.mark_complete()
+        if next_task and next_task not in self.tasks:
+            self.tasks.append(next_task)
+        return next_task
 
     def organize_tasks(
         self, tasks: list[Task] | None = None, owner: Owner | None = None
