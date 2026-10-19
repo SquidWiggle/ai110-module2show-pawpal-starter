@@ -153,71 +153,139 @@ else:
 # ----------------- MAIN PANEL -----------------
 st.title("🐾 PawPal+ Pet Care Planner")
 
-# Daily Schedule view
-st.header("📅 Daily Schedule")
-selected_date = st.date_input("Target Date", value=date.today(), key="target_date_picker")
+# Conflict Analysis & Notifications (Elevated at Top)
+conflict_warnings = owner.scheduler.get_conflict_warnings()
+conflicts = owner.scheduler.alert_conflict()
+conflicting_task_ids = set()
+for c1, c2 in conflicts:
+    conflicting_task_ids.add(id(c1))
+    if isinstance(c2, Task):
+        conflicting_task_ids.add(id(c2))
 
-tasks = owner.scheduler.see_todays_tasks(target_date=selected_date)
-
-if not tasks:
-    st.info(f"No tasks scheduled for {selected_date.strftime('%B %d, %Y')}.")
+if conflict_warnings:
+    with st.expander(f"⚠️ Schedule Conflicts Detected ({len(conflict_warnings)})", expanded=True):
+        for w in conflict_warnings:
+            if "[Same-Pet Conflict]" in w or "[Blocked Time Collision]" in w:
+                st.error(w)
+            else:
+                st.warning(w)
 else:
-    for idx, t in enumerate(tasks):
-        due_str = t.due_date.strftime("%H:%M")
-        end_str = t.end_time.strftime("%H:%M")
-        pet_name = t.pet.name if t.pet else "Unassigned"
-        rec_badge = f" • 🔁 {t.recurrence.value}" if t.recurrence else ""
-
-        with st.container(border=True):
-            col_time, col_details, col_status, col_action = st.columns([2, 4, 2, 2])
-            with col_time:
-                st.markdown(f"**⏰ {due_str} - {end_str}**")
-                st.caption(f"🐾 **{pet_name}**{rec_badge}")
-            with col_details:
-                st.markdown(f"**{t.description}**")
-                st.caption(
-                    f"Type: `{t.type.value}` | Priority: `{t.priority.value}` | Duration: {t.duration} mins"
-                )
-            with col_status:
-                if t.is_completed:
-                    st.success("✅ Completed")
-                else:
-                    st.warning("⏳ Pending")
-            with col_action:
-                if not t.is_completed:
-                    if st.button("Mark Complete", key=f"complete_{idx}_{t.due_date.timestamp()}"):
-                        t.mark_complete()
-                        st.rerun()
+    st.success("✅ All schedules clear — no task or blocked-time collisions detected.")
 
 st.divider()
 
-# Conflict Analysis Section
-st.header("⚠️ Conflict Analysis")
-conflicts = owner.scheduler.alert_conflict()
-if conflicts:
-    st.warning(f"Found {len(conflicts)} schedule conflict(s):")
-    for idx, (t1, other) in enumerate(conflicts):
-        t1_pet = f" ({t1.pet.name})" if t1.pet else ""
-        t1_due = t1.due_date.strftime("%H:%M")
-        t1_end = t1.end_time.strftime("%H:%M")
-        t1_label = f"Task **'{t1.description}'**{t1_pet} [{t1_due} - {t1_end}]"
+# Schedule Controls & Filtering Toolbar
+st.header("📅 Pet Care Schedule")
 
-        if isinstance(other, Task):
-            other_pet = f" ({other.pet.name})" if other.pet else ""
-            other_due = other.due_date.strftime("%H:%M")
-            other_end = other.end_time.strftime("%H:%M")
-            other_label = f"Task **'{other.description}'**{other_pet} [{other_due} - {other_end}]"
-        elif isinstance(other, TimeSlot):
-            rec_text = f" ({other.recurrence.value})" if other.recurrence else ""
-            o_start = other.start_time.strftime("%H:%M")
-            o_end = other.end_time.strftime("%H:%M") if other.end_time else "N/A"
-            other_label = f"Blocked Time **'{other.description or 'Blocked'}'** [{o_start} - {o_end}{rec_text}]"
-        else:
-            other_label = str(other)
+col_scope, col_date, col_pet, col_status, col_sort = st.columns([2, 2, 2, 2, 2])
 
-        st.error(f"**Conflict {idx + 1}:** {t1_label} collides with {other_label}")
+with col_scope:
+    view_scope = st.selectbox("View Scope", ["Target Date", "All Upcoming"], key="view_scope_select")
+
+with col_date:
+    selected_date = st.date_input(
+        "Target Date",
+        value=date.today(),
+        key="target_date_picker",
+        disabled=(view_scope == "All Upcoming"),
+    )
+
+with col_pet:
+    pet_options = ["All Pets"] + [p.name for p in owner.pets]
+    selected_pet_name = st.selectbox("Filter Pet", pet_options, key="filter_pet_select")
+
+with col_status:
+    selected_status = st.selectbox("Filter Status", ["All", "Pending Only", "Completed Only"], key="filter_status_select")
+
+with col_sort:
+    selected_sort = st.selectbox("Sort By", ["Time (Chronological)", "Priority (High → Low)"], key="sort_by_select")
+
+# Resolve tasks using Scheduler methods
+if view_scope == "Target Date":
+    base_tasks = owner.scheduler.see_todays_tasks(target_date=selected_date)
 else:
-    st.success("No schedule collisions detected.")
+    base_tasks = owner.scheduler._resolve_tasks()
+
+pet_filter = None if selected_pet_name == "All Pets" else selected_pet_name
+status_filter = None
+if selected_status == "Pending Only":
+    status_filter = False
+elif selected_status == "Completed Only":
+    status_filter = True
+
+# Leverage Scheduler.sort_by_time and Scheduler.organize_tasks
+filtered_time_tasks = owner.scheduler.sort_by_time(
+    tasks=base_tasks,
+    pet=pet_filter,
+    completion_status=status_filter,
+)
+
+if selected_sort == "Priority (High → Low)":
+    tasks = owner.scheduler.organize_tasks(tasks=filtered_time_tasks)
+else:
+    tasks = filtered_time_tasks
+
+# Render Tasks: Tabular & Card Views
+tab_cards, tab_table = st.tabs(["📇 Task Cards", "📊 Data Table"])
+
+with tab_table:
+    if not tasks:
+        st.info("No tasks to display matching the current filters.")
+    else:
+        table_rows = []
+        for t in tasks:
+            table_rows.append(
+                {
+                    "Time": f"{t.due_date.strftime('%Y-%m-%d %H:%M')} - {t.end_time.strftime('%H:%M')}",
+                    "Pet": t.pet.name if t.pet else "Unassigned",
+                    "Task": t.description,
+                    "Type": t.type.value,
+                    "Priority": t.priority.value,
+                    "Recurrence": t.recurrence.value if t.recurrence else "None",
+                    "Status": "✅ Completed" if t.is_completed else "⏳ Pending",
+                    "Conflict": "⚠️ Yes" if id(t) in conflicting_task_ids else "None",
+                }
+            )
+        st.table(table_rows)
+
+with tab_cards:
+    if not tasks:
+        st.info("No tasks to display matching the current filters.")
+    else:
+        for idx, t in enumerate(tasks):
+            is_conflict = id(t) in conflicting_task_ids
+            due_str = (
+                t.due_date.strftime("%Y-%m-%d %H:%M")
+                if view_scope == "All Upcoming"
+                else t.due_date.strftime("%H:%M")
+            )
+            end_str = t.end_time.strftime("%H:%M")
+            pet_name = t.pet.name if t.pet else "Unassigned"
+            rec_badge = f" • 🔁 {t.recurrence.value}" if t.recurrence else ""
+            conflict_badge = " • ⚠️ **CONFLICT**" if is_conflict else ""
+
+            with st.container(border=True):
+                col_time, col_details, col_status, col_action = st.columns([2, 4, 2, 2])
+                with col_time:
+                    st.markdown(f"**⏰ {due_str} - {end_str}**")
+                    st.caption(f"🐾 **{pet_name}**{rec_badge}{conflict_badge}")
+                with col_details:
+                    st.markdown(f"**{t.description}**")
+                    st.caption(
+                        f"Type: `{t.type.value}` | Priority: `{t.priority.value}` | Duration: {t.duration} mins"
+                    )
+                with col_status:
+                    if t.is_completed:
+                        st.success("✅ Completed")
+                    elif is_conflict:
+                        st.error("⚠️ Conflict")
+                    else:
+                        st.warning("⏳ Pending")
+                with col_action:
+                    if not t.is_completed:
+                        if st.button("Mark Complete", key=f"complete_{idx}_{t.due_date.timestamp()}_{id(t)}"):
+                            owner.scheduler.complete_task(t)
+                            st.rerun()
 
 st.divider()
 
