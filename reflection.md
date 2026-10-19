@@ -4,8 +4,60 @@
 
 **a. Initial design**
 
+A user of PawPal+ should be able to
+1. add a pet
+2. feed a pet
+3. see today's task
+4. schedule a walk
+
 - Briefly describe your initial UML design.
+
+Owner:
+  - attributes:
+    - name: str
+    - pets: []Pet
+    - available_time: {}
+  - methods:
+    - schedule_task(task_type)
+    - add_pet
+    - feed_pet
+    - play_with_pet
+    - see_todays_task
+
+Pet:
+  - attributes:
+    - name
+    - specie
+    - breed
+    - required_care: [food, walk, play_time, grooming]
+  - methods:
+    - play
+    - eat
+
+Task:
+  - attributes:
+    - priority (high, medium, low)
+    - type: feedings, walks, medications, vet appointment, play, grooming
+    - pet_name
+    - duration: min, hour
+    - recurrence (daily, weekly, monthly)
+  - methods:
+    - execute
+
+Scheduler:
+  - attrubutes:
+    - tasks: Task[]
+  - methods:
+    - schedule a task
+    - alert about a conflict
+    - suggest time slot
+
+
 - What classes did you include, and what responsibilities did you assign to each?
+  - Owner: The user of the app who can have a existing schedule. The owner is responsible for scheduling tasks to take care of their pets.
+  - Pet: A pet that can be adopted by the owner. It is responsible for nothing much other than eat and play. A pet come with the care it needs. A pet can need only food, walk, or grooming, or it can need medication, play_time, frequent vet_appointments.
+  - Task: Task object holds information about the task - which pet the task applies to, duration of the task, priority of the task.
+  - Scheduler: A scheduler keeps track of the tasks an owner has scheduled on their calendar.
 
 **b. Design changes**
 
