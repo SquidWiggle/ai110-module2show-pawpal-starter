@@ -162,6 +162,9 @@ class Task:
     def execute(self) -> None:
         self.is_completed = True
 
+    def mark_complete(self) -> None:
+        self.is_completed = True
+
 
 @dataclass
 class Owner:

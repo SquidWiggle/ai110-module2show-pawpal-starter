@@ -192,3 +192,34 @@ def test_organize_tasks_due_date_precedence():
     ordered = scheduler.organize_tasks([task_late_high, task_early_low, task_early_high])
     assert ordered == [task_early_high, task_early_low, task_late_high]
 
+
+def test_task_mark_complete():
+    task = Task(description="Evening feeding", type=TaskType.FEEDINGS)
+    assert task.is_completed is False
+    assert task.completion_status is False
+
+    task.mark_complete()
+    assert task.is_completed is True
+    assert task.completion_status is True
+
+    # Idempotent call
+    task.mark_complete()
+    assert task.is_completed is True
+
+
+def test_pet_task_addition_count_increase():
+    pet = Pet(name="Mochi", species="Dog", breed="Shiba")
+    assert len(pet.get_tasks()) == 0
+
+    task1 = Task(description="Walk", type=TaskType.WALKS)
+    pet.add_task(task1)
+    assert len(pet.get_tasks()) == 1
+
+    task2 = Task(description="Dinner", type=TaskType.FEEDINGS)
+    pet.add_task(task2)
+    assert len(pet.get_tasks()) == 2
+
+    # Duplicate addition should not increase count
+    pet.add_task(task1)
+    assert len(pet.get_tasks()) == 2
+
