@@ -93,10 +93,12 @@ Scheduler:
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
   - I used AI to brainstorm, improve, and enrich my system design.
   - AI has helped review my first round of implementation and catch bugs. 
-  - During review, I asked AI to generate default time block for Owner's "slepp" time and "work" time so the app become actually useful to the pet owners. AI suggested implementation plan, and helped me evaluate different way of implementations.
+  - During review, I asked AI to generate default time block for Owner's "sleep" time and "work" time so the app become actually useful to the pet owners. AI suggested implementation plan, and helped me evaluate different way of implementations.
 - What kinds of prompts or questions were most helpful?
   - Asking AI to review existing code to catch bugs. Describe use case as specifically as possible.
   - Evaluate alternative implementations and checking if the implementation is as minimal as possible.
+  - Accuracy review, over engineering review, spawning subagent with a higher tier model for advise are my favorite features.
+  - Seperating planning, executing, and reviewing chats can help improve code quality.
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
@@ -112,12 +114,18 @@ Scheduler:
 **a. What you tested**
 
 - What behaviors did you test?
+  - Create and add a new pet should succeed
+  - Schedule a new task with conflict between the new task and blcocked out periods should generate a warning
+  - Schedule a new task with conflict between the new task and existing tasks should generate a warning
 - Why were these tests important?
+  - Testing is the only way to verify AI generated code under high speed, if there is no time to review the actual implementation.
 
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
+  - 4
 - What edge cases would you test next if you had more time?
+  - tasks spanning over midnight over daylight saving times.
 
 ---
 
@@ -126,10 +134,12 @@ Scheduler:
 **a. What went well**
 
 - What part of this project are you most satisfied with?
+  - Setting up workflow that run code review for every iteration.
 
 **b. What you would improve**
 
 - If you had another iteration, what would you improve or redesign?
+  - Smart task time suggestions where the scheduler automatically finds time blocks given a list of tasks, their priority, and their reccurence.
 
 **c. Key takeaway**
 
