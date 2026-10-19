@@ -36,7 +36,8 @@ class TimeSlot:
         if self.end_time is None and self.duration is not None:
             self.end_time = self.start_time + timedelta(minutes=self.duration)
         elif self.duration is None and self.end_time is not None:
-            self.duration = int((self.end_time - self.start_time).total_seconds() // 60)
+            self.duration = int(
+                (self.end_time - self.start_time).total_seconds() // 60)
         elif self.end_time is None and self.duration is None:
             self.end_time = self.start_time
             self.duration = 0
@@ -58,7 +59,6 @@ class TimeSlot:
                     if a_s < b_e and b_s < a_e:
                         return True
         return False
-
 
 
 @dataclass
@@ -132,7 +132,8 @@ class Task:
             self.is_completed = is_completed
 
         if not self.description:
-            self.description = self.type.value if hasattr(self.type, "value") else str(self.type)
+            self.description = self.type.value if hasattr(
+                self.type, "value") else str(self.type)
 
     @property
     def time(self) -> datetime:
@@ -216,7 +217,8 @@ class Owner:
             if b.end_time is None:
                 continue
             if b.recurrence in (Recurrence.DAILY, Recurrence.WEEKLY, Recurrence.MONTHLY):
-                block_dur = b.duration or int((b.end_time - b.start_time).total_seconds() // 60)
+                block_dur = b.duration or int(
+                    (b.end_time - b.start_time).total_seconds() // 60)
                 curr = start.date() - timedelta(days=1)
                 while curr <= end.date():
                     match = (
@@ -228,11 +230,13 @@ class Owner:
                         b_start = datetime.combine(curr, b.start_time.time())
                         b_end = b_start + timedelta(minutes=block_dur)
                         if b_start < end and b_end > start:
-                            relevant_blocks.append((max(start, b_start), min(end, b_end)))
+                            relevant_blocks.append(
+                                (max(start, b_start), min(end, b_end)))
                     curr += timedelta(days=1)
             else:
                 if b.start_time < end and b.end_time > start:
-                    relevant_blocks.append((max(start, b.start_time), min(end, b.end_time)))
+                    relevant_blocks.append(
+                        (max(start, b.start_time), min(end, b.end_time)))
 
         for b_start, b_end in sorted(relevant_blocks, key=lambda x: x[0]):
             new_free = []
@@ -270,7 +274,8 @@ class Owner:
         target_scheduler.schedule_task(task)
 
     def feed_pet(self, pet: Pet) -> None:
-        feed_tasks = [t for t in pet.tasks if t.type == TaskType.FEEDINGS and not t.is_completed]
+        feed_tasks = [t for t in pet.tasks if t.type ==
+                      TaskType.FEEDINGS and not t.is_completed]
         if feed_tasks:
             for t in feed_tasks:
                 t.execute()
@@ -287,7 +292,8 @@ class Owner:
             pet.add_task(completed_feed)
 
     def play_with_pet(self, pet: Pet) -> None:
-        play_tasks = [t for t in pet.tasks if t.type == TaskType.PLAY and not t.is_completed]
+        play_tasks = [t for t in pet.tasks if t.type ==
+                      TaskType.PLAY and not t.is_completed]
         if play_tasks:
             for t in play_tasks:
                 t.execute()
@@ -326,7 +332,8 @@ class Scheduler:
         self, tasks: list[Task] | None = None, owner: Owner | None = None
     ) -> list[Task]:
         task_list = tasks if tasks is not None else self._resolve_tasks(owner)
-        priority_weights = {Priority.HIGH: 0, Priority.MEDIUM: 1, Priority.LOW: 2}
+        priority_weights = {Priority.HIGH: 0,
+                            Priority.MEDIUM: 1, Priority.LOW: 2}
         return sorted(
             task_list,
             key=lambda t: (
@@ -334,6 +341,33 @@ class Scheduler:
                 priority_weights.get(t.priority, 1),
             ),
         )
+
+    def sort_by_time(
+        self,
+        tasks: list[Task] | None = None,
+        owner: Owner | None = None,
+        pet: Pet | str | None = None,
+        is_completed: bool | None = None,
+        completion_status: bool | None = None,
+    ) -> list[Task]:
+        task_list = list(tasks) if tasks is not None else self._resolve_tasks(owner)
+
+        if pet is not None:
+            pet_name = pet.name if hasattr(pet, "name") else str(pet)
+            task_list = [t for t in task_list if t.pet and t.pet.name.lower() == pet_name.lower()]
+
+        target_status = completion_status if completion_status is not None else is_completed
+        if target_status is not None:
+            task_list = [t for t in task_list if t.is_completed == target_status]
+
+        def _sort_key(t: Task):
+            val = t.time
+            if isinstance(val, str):
+                return [int(p) for p in val.split(":")]
+            return val
+
+        return sorted(task_list, key=_sort_key)
+
 
     def see_todays_tasks(
         self, owner: Owner | None = None, target_date: datetime | date | None = None
@@ -379,7 +413,8 @@ class Scheduler:
         owner: Owner | None = None,
     ) -> TimeSlot | None:
         active_owner = owner or self.owner
-        slots = available_times or (active_owner.available_times if active_owner and active_owner.available_times else [])
+        slots = available_times or (
+            active_owner.available_times if active_owner and active_owner.available_times else [])
         if not slots and active_owner and active_owner.blocked_times:
             now = datetime.now()
             day_start = datetime(now.year, now.month, now.day, 0, 0)
@@ -395,12 +430,14 @@ class Scheduler:
         for slot in slots:
             candidate_start = slot.start_time
             while candidate_start + needed_duration <= slot.end_time:
-                candidate_slot = TimeSlot(candidate_start, candidate_start + needed_duration)
+                candidate_slot = TimeSlot(
+                    candidate_start, candidate_start + needed_duration)
                 overlap = False
                 for task in tasks:
                     if candidate_slot.overlaps(task.time_slot):
                         overlap = True
-                        candidate_start = max(task.end_time, candidate_start + timedelta(minutes=15))
+                        candidate_start = max(
+                            task.end_time, candidate_start + timedelta(minutes=15))
                         break
                 if overlap:
                     continue
@@ -409,14 +446,17 @@ class Scheduler:
                         overlap = True
                         prev_start = candidate_start
                         if blocked.recurrence == Recurrence.DAILY and blocked.end_time:
-                            proj_end = datetime.combine(candidate_start.date(), blocked.end_time.time())
+                            proj_end = datetime.combine(
+                                candidate_start.date(), blocked.end_time.time())
                             if proj_end <= candidate_start:
                                 proj_end += timedelta(days=1)
                             candidate_start = proj_end
                         else:
-                            candidate_start = blocked.end_time or (candidate_start + timedelta(minutes=15))
+                            candidate_start = blocked.end_time or (
+                                candidate_start + timedelta(minutes=15))
                         if candidate_start <= prev_start:
-                            candidate_start = prev_start + timedelta(minutes=15)
+                            candidate_start = prev_start + \
+                                timedelta(minutes=15)
                         break
                 if not overlap:
                     return candidate_slot

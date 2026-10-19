@@ -300,3 +300,64 @@ def test_timeslot_overlaps_overnight_daily():
     assert sleep_slot.overlaps(day_task) is False
     assert day_task.overlaps(sleep_slot) is False
 
+
+def test_scheduler_sort_by_time_and_filtering():
+    scheduler = Scheduler()
+    dog = Pet(name="Mochi", species="Dog", breed="Shiba")
+    cat = Pet(name="Luna", species="Cat", breed="Siamese")
+
+    t1 = Task(
+        description="Morning Walk",
+        time=datetime(2026, 10, 19, 8, 30),
+        pet=dog,
+        is_completed=True,
+    )
+    t2 = Task(
+        description="Evening Feed",
+        time=datetime(2026, 10, 19, 18, 0),
+        pet=dog,
+        is_completed=False,
+    )
+    t3 = Task(
+        description="Cat Meds",
+        time=datetime(2026, 10, 19, 7, 0),
+        pet=cat,
+        is_completed=False,
+    )
+
+    all_tasks = [t2, t1, t3]
+
+    # 1. Pure sort by time
+    sorted_all = scheduler.sort_by_time(all_tasks)
+    assert sorted_all == [t3, t1, t2]
+
+    # 2. Filter by pet name string
+    dog_tasks = scheduler.sort_by_time(all_tasks, pet="Mochi")
+    assert dog_tasks == [t1, t2]
+
+    # 3. Filter by Pet object
+    cat_tasks = scheduler.sort_by_time(all_tasks, pet=cat)
+    assert cat_tasks == [t3]
+
+    # 4. Filter by completion status (pending only)
+    pending_tasks = scheduler.sort_by_time(all_tasks, is_completed=False)
+    assert pending_tasks == [t3, t2]
+
+    # 5. Filter by completion status (completed only)
+    completed_tasks = scheduler.sort_by_time(all_tasks, is_completed=True)
+    assert completed_tasks == [t1]
+
+
+def test_scheduler_sort_by_time_string_format():
+    scheduler = Scheduler()
+    t1 = Task(description="Late walk", time=datetime(2026, 10, 19, 14, 0))
+    t1.time = "14:00"
+    t2 = Task(description="Early feed", time=datetime(2026, 10, 19, 8, 30))
+    t2.time = "08:30"
+    t3 = Task(description="Midday play", time=datetime(2026, 10, 19, 12, 15))
+    t3.time = "12:15"
+
+    sorted_tasks = scheduler.sort_by_time([t1, t2, t3])
+    assert sorted_tasks == [t2, t3, t1]
+
+
