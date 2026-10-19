@@ -29,6 +29,10 @@ class TimeSlot:
     start_time: datetime
     end_time: datetime
 
+    def overlaps(self, other: "TimeSlot") -> bool:
+        return self.start_time < other.end_time and other.start_time < self.end_time
+
+
 
 @dataclass
 class Pet:
@@ -131,6 +135,10 @@ class Task:
     def end_time(self) -> datetime:
         return self.due_date + timedelta(minutes=self.duration)
 
+    @property
+    def time_slot(self) -> TimeSlot:
+        return TimeSlot(start_time=self.due_date, end_time=self.end_time)
+
     def execute(self) -> None:
         self.is_completed = True
 
@@ -140,6 +148,7 @@ class Owner:
     name: str
     pets: list[Pet] = field(default_factory=list)
     available_times: list[TimeSlot] = field(default_factory=list)
+    blocked_times: list[TimeSlot] = field(default_factory=list)
 
     def add_pet(self, pet: Pet) -> None:
         if pet not in self.pets:
@@ -235,14 +244,20 @@ class Scheduler:
         self,
         available_times: list[TimeSlot] | None = None,
         owner: Owner | None = None,
-    ) -> list[tuple[Task, Task]]:
+    ) -> list[tuple[Task, Task | TimeSlot]]:
+        active_owner = owner or self.owner
         tasks = [t for t in self._resolve_tasks(owner) if not t.is_completed]
-        conflicts: list[tuple[Task, Task]] = []
+        conflicts: list[tuple[Task, Task | TimeSlot]] = []
         for i in range(len(tasks)):
             for j in range(i + 1, len(tasks)):
                 t1, t2 = tasks[i], tasks[j]
-                if t1.due_date < t2.end_time and t2.due_date < t1.end_time:
+                if t1.time_slot.overlaps(t2.time_slot):
                     conflicts.append((t1, t2))
+        if active_owner is not None:
+            for task in tasks:
+                for blocked in active_owner.blocked_times:
+                    if task.time_slot.overlaps(blocked):
+                        conflicts.append((task, blocked))
         return conflicts
 
     def suggest_time_slot(
@@ -251,24 +266,32 @@ class Scheduler:
         available_times: list[TimeSlot] | None = None,
         owner: Owner | None = None,
     ) -> TimeSlot | None:
-        slots = available_times or (self.owner.available_times if self.owner else [])
+        active_owner = owner or self.owner
+        slots = available_times or (active_owner.available_times if active_owner else [])
         if not slots:
             return None
 
         tasks = [t for t in self._resolve_tasks(owner) if not t.is_completed]
         needed_duration = timedelta(minutes=duration_minutes)
+        blocked_times = active_owner.blocked_times if active_owner else []
 
         for slot in slots:
             candidate_start = slot.start_time
             while candidate_start + needed_duration <= slot.end_time:
-                candidate_end = candidate_start + needed_duration
-                # Check for overlap with scheduled tasks
+                candidate_slot = TimeSlot(candidate_start, candidate_start + needed_duration)
                 overlap = False
                 for task in tasks:
-                    if candidate_start < task.end_time and task.due_date < candidate_end:
+                    if candidate_slot.overlaps(task.time_slot):
                         overlap = True
                         candidate_start = task.end_time
                         break
+                if overlap:
+                    continue
+                for blocked in blocked_times:
+                    if candidate_slot.overlaps(blocked):
+                        overlap = True
+                        candidate_start = blocked.end_time
+                        break
                 if not overlap:
-                    return TimeSlot(candidate_start, candidate_end)
+                    return candidate_slot
         return None

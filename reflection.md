@@ -86,9 +86,11 @@ Scheduler:
 **a. How you used AI**
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
-I used AI to brainstorm, improve, and enrich my system design.
+  - I used AI to brainstorm, improve, and enrich my system design.
+  - AI has helped review my first round of implementation and catch bugs. 
+  - During review, I asked AI to generate default time block for Owner's "slepp" time and "work" time so the app become actually useful to the pet owners. AI suggested implementation plan, and helped me evaluate different way of implementations.
 - What kinds of prompts or questions were most helpful?
-
+  - Asking AI to review existing code to catch bugs. Describe use case as specifically as possible.
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
